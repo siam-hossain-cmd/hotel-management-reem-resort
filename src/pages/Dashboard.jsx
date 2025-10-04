@@ -1,54 +1,188 @@
-import React from 'react';
-import { FileText, Users, DollarSign, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  FileText, 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  Activity,
+  AlertTriangle,
+  Shield,
+  Clock,
+  Eye
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const Dashboard = () => {
-  const stats = [
-    {
-      title: 'Total Invoices',
-      value: '156',
-      icon: FileText,
-      color: 'blue',
-      change: '+12%'
-    },
-    {
-      title: 'Total Customers',
-      value: '89',
-      icon: Users,
-      color: 'green',
-      change: '+5%'
-    },
-    {
-      title: 'Total Revenue',
-      value: '$24,580',
-      icon: DollarSign,
-      color: 'purple',
-      change: '+18%'
-    },
-    {
-      title: 'Growth',
-      value: '23%',
-      icon: TrendingUp,
-      color: 'orange',
-      change: '+3%'
-    }
-  ];
+  const { user, hasPermission, isAdmin } = useAuth();
+  const [dashboardData, setDashboardData] = useState({
+    stats: [],
+    recentInvoices: [],
+    recentActivity: [],
+    securityAlerts: []
+  });
+  const [loading, setLoading] = useState(true);
+  
+  const getUserName = () => {
+    if (user?.name) return user.name;
+    if (user?.email) return user.email.split('@')[0];
+    return 'User';
+  };
 
-  const recentInvoices = [
-    { id: 'INV-001', customer: 'John Doe', amount: '$1,250', status: 'Paid', date: '2024-01-15' },
-    { id: 'INV-002', customer: 'Jane Smith', amount: '$850', status: 'Pending', date: '2024-01-14' },
-    { id: 'INV-003', customer: 'Bob Wilson', amount: '$2,100', status: 'Paid', date: '2024-01-13' },
-    { id: 'INV-004', customer: 'Alice Brown', amount: '$750', status: 'Overdue', date: '2024-01-10' },
-  ];
+  useEffect(() => {
+    loadDashboardData();
+  }, [user]);
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load data based on user permissions
+      const data = {
+        stats: await loadStatsData(),
+        recentInvoices: hasPermission('canViewInvoices') ? await loadRecentInvoices() : [],
+        recentActivity: hasPermission('canViewHistory') ? await loadRecentActivity() : [],
+        securityAlerts: isAdmin() ? await loadSecurityAlerts() : []
+      };
+      
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStatsData = async () => {
+    // Base stats that all users can see
+    const baseStats = [
+      {
+        title: 'My Profile',
+        value: user?.isActive ? 'Active' : 'Inactive',
+        icon: Users,
+        color: user?.isActive ? 'green' : 'red',
+        change: `Role: ${user?.role || 'Unknown'}`,
+        show: true
+      }
+    ];
+
+    const adminStats = [
+      {
+        title: 'Total Invoices',
+        value: '156', // This would come from your database
+        icon: FileText,
+        color: 'blue',
+        change: '+12%',
+        show: hasPermission('canViewInvoices')
+      },
+      {
+        title: 'Total Customers',
+        value: '89',
+        icon: Users,
+        color: 'green',
+        change: '+5%',
+        show: hasPermission('canViewCustomers')
+      },
+      {
+        title: 'Total Revenue',
+        value: '$24,580',
+        icon: DollarSign,
+        color: 'purple',
+        change: '+18%',
+        show: hasPermission('canViewReports')
+      },
+      {
+        title: 'System Health',
+        value: '98%',
+        icon: TrendingUp,
+        color: 'orange',
+        change: '+2%',
+        show: isAdmin()
+      }
+    ];
+
+    return [...baseStats, ...adminStats.filter(stat => stat.show)];
+  };
+
+  const loadRecentInvoices = async () => {
+    // Mock data - replace with actual database call
+    return [
+      { id: 'INV-001', customer: 'John Doe', amount: '$1,250', status: 'Paid', date: '2024-01-15' },
+      { id: 'INV-002', customer: 'Jane Smith', amount: '$850', status: 'Pending', date: '2024-01-14' },
+      { id: 'INV-003', customer: 'Bob Wilson', amount: '$2,100', status: 'Paid', date: '2024-01-13' },
+      { id: 'INV-004', customer: 'Alice Brown', amount: '$750', status: 'Overdue', date: '2024-01-10' },
+    ];
+  };
+
+  const loadRecentActivity = async () => {
+    // Mock data - replace with actual database call
+    return [
+      {
+        id: 1,
+        action: 'Invoice Created',
+        description: 'Created invoice INV-001 for John Doe',
+        timestamp: '2024-01-15 10:30 AM',
+        user: 'Admin User',
+        riskLevel: 'low'
+      },
+      {
+        id: 2,
+        action: 'User Login',
+        description: 'User logged in successfully',
+        timestamp: '2024-01-15 09:15 AM',
+        user: user?.name || 'Current User',
+        riskLevel: 'low'
+      },
+      {
+        id: 3,
+        action: 'Customer Updated',
+        description: 'Updated customer information for Jane Smith',
+        timestamp: '2024-01-14 3:45 PM',
+        user: 'Admin User',
+        riskLevel: 'medium'
+      }
+    ];
+  };
+
+  const loadSecurityAlerts = async () => {
+    // Mock data - replace with actual database call
+    return [
+      {
+        id: 1,
+        type: 'warning',
+        message: 'Multiple login attempts detected',
+        timestamp: '2024-01-15 11:00 AM',
+        severity: 'medium'
+      }
+    ];
+  };
+
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>Dashboard Overview</h1>
-        <p>Welcome back! Here's what's happening with your invoices today.</p>
+        <p>Welcome back, {getUserName()}! Here's what's happening with your system today.</p>
+        {user?.role && (
+          <div className="user-role-badge">
+            <Shield size={16} />
+            <span>{user.role} Access</span>
+          </div>
+        )}
       </div>
 
+      {/* Stats Grid */}
       <div className="stats-grid">
-        {stats.map((stat, index) => {
+        {dashboardData.stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <div key={index} className={`stat-card ${stat.color}`}>
@@ -66,22 +200,146 @@ const Dashboard = () => {
       </div>
 
       <div className="dashboard-content">
-        <div className="recent-invoices">
-          <h2>Recent Invoices</h2>
-          <div className="invoice-list">
-            {recentInvoices.map((invoice) => (
-              <div key={invoice.id} className="invoice-item">
-                <div className="invoice-id">{invoice.id}</div>
-                <div className="invoice-customer">{invoice.customer}</div>
-                <div className="invoice-amount">{invoice.amount}</div>
-                <div className={`invoice-status ${invoice.status.toLowerCase()}`}>
-                  {invoice.status}
+        {/* Recent Invoices - Show only if user has permission */}
+        {hasPermission('canViewInvoices') && dashboardData.recentInvoices.length > 0 && (
+          <div className="dashboard-section recent-invoices">
+            <div className="section-header">
+              <h2>
+                <FileText size={20} />
+                Recent Invoices
+              </h2>
+              {hasPermission('canCreateInvoices') && (
+                <button className="btn btn-primary btn-sm">
+                  Create New
+                </button>
+              )}
+            </div>
+            <div className="invoice-list">
+              {dashboardData.recentInvoices.map((invoice) => (
+                <div key={invoice.id} className="invoice-item">
+                  <div className="invoice-id">{invoice.id}</div>
+                  <div className="invoice-customer">{invoice.customer}</div>
+                  <div className="invoice-amount">{invoice.amount}</div>
+                  <div className={`invoice-status ${invoice.status.toLowerCase()}`}>
+                    {invoice.status}
+                  </div>
+                  <div className="invoice-date">{invoice.date}</div>
+                  {hasPermission('canEditInvoices') && (
+                    <div className="invoice-actions">
+                      <button className="btn-icon" title="View">
+                        <Eye size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="invoice-date">{invoice.date}</div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Activity - Show only if user has permission */}
+        {hasPermission('canViewHistory') && dashboardData.recentActivity.length > 0 && (
+          <div className="dashboard-section recent-activity">
+            <div className="section-header">
+              <h2>
+                <Activity size={20} />
+                Recent Activity
+              </h2>
+            </div>
+            <div className="activity-list">
+              {dashboardData.recentActivity.map((activity) => (
+                <div key={activity.id} className="activity-item">
+                  <div className={`activity-indicator ${activity.riskLevel}`}></div>
+                  <div className="activity-content">
+                    <div className="activity-action">{activity.action}</div>
+                    <div className="activity-description">{activity.description}</div>
+                    <div className="activity-meta">
+                      <span className="activity-user">{activity.user}</span>
+                      <span className="activity-time">
+                        <Clock size={14} />
+                        {activity.timestamp}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Security Alerts - Admin only */}
+        {isAdmin() && dashboardData.securityAlerts.length > 0 && (
+          <div className="dashboard-section security-alerts">
+            <div className="section-header">
+              <h2>
+                <AlertTriangle size={20} />
+                Security Alerts
+              </h2>
+            </div>
+            <div className="alert-list">
+              {dashboardData.securityAlerts.map((alert) => (
+                <div key={alert.id} className={`alert-item ${alert.severity}`}>
+                  <AlertTriangle size={16} />
+                  <div className="alert-content">
+                    <div className="alert-message">{alert.message}</div>
+                    <div className="alert-timestamp">{alert.timestamp}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="dashboard-section quick-actions">
+          <div className="section-header">
+            <h2>Quick Actions</h2>
+          </div>
+          <div className="action-grid">
+            {hasPermission('canCreateInvoices') && (
+              <button className="action-card">
+                <FileText size={24} />
+                <span>Create Invoice</span>
+              </button>
+            )}
+            {hasPermission('canViewCustomers') && (
+              <button className="action-card">
+                <Users size={24} />
+                <span>Manage Customers</span>
+              </button>
+            )}
+            {hasPermission('canViewReports') && (
+              <button className="action-card">
+                <TrendingUp size={24} />
+                <span>View Reports</span>
+              </button>
+            )}
+            {isAdmin() && (
+              <button className="action-card">
+                <Shield size={24} />
+                <span>System Settings</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Help Section for New Users */}
+        {user?.role === 'user' && (
+          <div className="dashboard-section help-section">
+            <div className="section-header">
+              <h2>Getting Started</h2>
+            </div>
+            <div className="help-content">
+              <p>Welcome to the Reem Resort Invoice System! Here are some things you can do:</p>
+              <ul>
+                <li>Create and manage invoices for customers</li>
+                <li>View customer information and history</li>
+                <li>Track your invoice performance</li>
+                {hasPermission('canViewReports') && <li>Generate detailed reports</li>}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

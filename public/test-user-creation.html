@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Creation Test - Reem Resort</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background: #3b82f6;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        
+        button:hover {
+            background: #2563eb;
+        }
+        
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+            margin-bottom: 1rem;
+        }
+        
+        .test-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 2px solid #e5e7eb;
+        }
+        
+        .test-user {
+            background: #f9fafb;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .test-user strong {
+            display: block;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+        
+        .test-user small {
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 User Creation Test Tool</h1>
+        
+        <div class="info">
+            <strong>Testing Fix:</strong> This tool tests the user creation fix that ensures new users 
+            can log in successfully without showing "Account Disabled" errors.
+        </div>
+        
+        <form id="createUserForm">
+            <div class="form-group">
+                <label for="name">Full Name:</label>
+                <input type="text" id="name" name="name" required placeholder="Test Admin User">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address:</label>
+                <input type="email" id="email" name="email" required placeholder="testadmin@reemresort.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required placeholder="minimum 6 characters" minlength="6">
+            </div>
+            
+            <div class="form-group">
+                <label for="role">Admin Role:</label>
+                <select id="role" name="role" required>
+                    <option value="FrontDesk">Front Desk (View Only)</option>
+                    <option value="Admin" selected>Admin (Create & Edit)</option>
+                    <option value="FullAdmin">Full Admin (All Access)</option>
+                    <option value="MasterAdmin">Master Admin (System Control)</option>
+                    <option value="FrontDesk">Front Desk Staff</option>
+                </select>
+            </div>
+            
+            <button type="submit" id="createBtn">Create Test User</button>
+        </form>
+        
+        <div id="result"></div>
+        
+        <div class="test-section">
+            <h2>🧪 Test Instructions</h2>
+            
+            <div class="test-user">
+                <strong>Step 1: Create Test User</strong>
+                <small>Fill out the form above and click "Create Test User"</small>
+            </div>
+            
+            <div class="test-user">
+                <strong>Step 2: Test Login</strong>
+                <small>Go to the main application and try logging in with the created user credentials</small>
+            </div>
+            
+            <div class="test-user">
+                <strong>Step 3: Verify Access</strong>
+                <small>The user should be able to log in successfully and access features based on their role level</small>
+            </div>
+            
+            <div class="test-user">
+                <strong>Expected Fix:</strong>
+                <small>Before the fix: New users would show "Account Disabled" error when trying to log in<br>
+                After the fix: New users should log in successfully with proper role permissions</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1lgNhs_MSTkMyA2nhRvi3vHf6KeHS-nE",
+            authDomain: "invoice-reem-resort.firebaseapp.com",
+            projectId: "invoice-reem-resort",
+            storageBucket: "invoice-reem-resort.firebasestorage.app",
+            messagingSenderId: "483324573465",
+            appId: "1:483324573465:web:d668568deffec4ba94f788"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Role permissions mapping
+        function getRolePermissions(role) {
+            const rolePermissions = {
+                'MasterAdmin': [
+                    'view_dashboard', 'view_analytics', 'create_invoice', 'view_invoices', 'edit_invoices', 'delete_invoices',
+                    'export_invoices', 'view_customers', 'create_customers', 'edit_customers', 'delete_customers',
+                    'view_rooms', 'create_rooms', 'edit_rooms', 'delete_rooms', 'upload_rooms', 'manage_room_inventory',
+                    'view_users', 'create_users', 'edit_users', 'delete_users', 'manage_roles', 'view_reports',
+                    'create_reports', 'export_reports', 'view_financial_reports', 'manage_settings', 'view_logs',
+                    'backup_data', 'restore_data', 'manage_billing', 'configure_taxes', 'manage_discounts',
+                    'access_api', 'view_audit_logs', 'manage_security', 'reset_passwords'
+                ],
+                'FullAdmin': [
+                    'view_dashboard', 'view_analytics', 'create_invoice', 'view_invoices', 'edit_invoices', 'delete_invoices',
+                    'export_invoices', 'view_customers', 'create_customers', 'edit_customers', 'delete_customers',
+                    'view_rooms', 'create_rooms', 'edit_rooms', 'delete_rooms', 'upload_rooms', 'manage_room_inventory',
+                    'view_reports', 'create_reports', 'export_reports', 'view_financial_reports', 'manage_billing',
+                    'configure_taxes', 'manage_discounts', 'access_api'
+                ],
+                'Admin': [
+                    'view_dashboard', 'create_invoice', 'view_invoices', 'edit_invoices', 'export_invoices',
+                    'view_customers', 'create_customers', 'edit_customers', 'view_rooms', 'create_rooms', 'edit_rooms',
+                    'view_reports', 'create_reports', 'export_reports'
+                ],
+                'FrontDesk': [
+                    'view_dashboard', 'view_invoices', 'view_customers', 'view_rooms', 'view_reports'
+                ]
+            };
+            
+            return rolePermissions[role] || rolePermissions['FrontDesk'];
+        }
+
+        // Form handler
+        document.getElementById('createUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const createBtn = document.getElementById('createBtn');
+            const resultDiv = document.getElementById('result');
+            
+            createBtn.disabled = true;
+            createBtn.textContent = 'Creating User...';
+            resultDiv.innerHTML = '';
+            
+            try {
+                const formData = new FormData(e.target);
+                const userData = {
+                    name: formData.get('name'),
+                    email: formData.get('email'),
+                    password: formData.get('password'),
+                    role: formData.get('role')
+                };
+                
+                console.log('Creating user:', userData);
+                
+                // Create user in Firebase Auth
+                const userCredential = await createUserWithEmailAndPassword(
+                    auth, 
+                    userData.email, 
+                    userData.password
+                );
+                
+                console.log('User created in Auth:', userCredential.user.uid);
+                
+                // Create user document in Firestore using UID as document ID
+                await setDoc(doc(db, 'users', userCredential.user.uid), {
+                    uid: userCredential.user.uid,
+                    email: userData.email,
+                    role: userData.role,
+                    name: userData.name,
+                    permissions: getRolePermissions(userData.role), // Add role-based permissions
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    status: 'active',
+                    createdBy: 'test-tool',
+                    lastLogin: null,
+                    loginCount: 0
+                });
+                
+                console.log('User document created in Firestore');
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        ✅ <strong>User Created Successfully!</strong><br>
+                        <strong>Email:</strong> ${userData.email}<br>
+                        <strong>Role:</strong> ${userData.role}<br>
+                        <strong>UID:</strong> ${userCredential.user.uid}<br>
+                        <br>
+                        <strong>Next:</strong> Try logging in with these credentials in the main application.
+                    </div>
+                `;
+                
+                // Reset form
+                e.target.reset();
+                
+            } catch (error) {
+                console.error('Error creating user:', error);
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>Error Creating User:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            } finally {
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create Test User';
+            }
+        });
+    </script>
+</body>
+</html>

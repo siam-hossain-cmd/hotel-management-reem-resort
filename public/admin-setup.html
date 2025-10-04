@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Admin User - Reem Resort</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        .security-note {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .security-note strong {
+            color: #78350f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Create Admin User</h1>
+        <p class="subtitle">Reem Resort Invoice System - Secure Setup</p>
+        
+        <div class="security-note">
+            <strong>Security Note:</strong> This will create an admin user who can login to the system. 
+            Master admin accounts cannot login directly for security reasons.
+        </div>
+
+        <form id="adminForm">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" required placeholder="admin@reemresort.com">
+            </div>
+
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <input type="text" id="name" required placeholder="Admin User">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required minlength="6" placeholder="Secure password">
+            </div>
+
+            <div class="form-group">
+                <label for="role">Role</label>
+                <select id="role" required>
+                    <option value="admin">Administrator (Full Access)</option>
+                    <option value="user">User (Limited Access)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="department">Department (Optional)</label>
+                <input type="text" id="department" placeholder="Administration">
+            </div>
+
+            <button type="submit" class="btn" id="createBtn">Create Admin User</button>
+        </form>
+
+        <div id="status" class="status" style="display: none;"></div>
+    </div>
+
+    <!-- Firebase v9 SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Your actual Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1lgNhs_MSTkMyA2nhRvi3vHf6KeHS-nE",
+            authDomain: "invoice-reem-resort.firebaseapp.com",
+            projectId: "invoice-reem-resort",
+            storageBucket: "invoice-reem-resort.firebasestorage.app",
+            messagingSenderId: "483324573465",
+            appId: "1:483324573465:web:d668568deffec4ba94f788",
+            measurementId: "G-T7T342052J"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Form elements
+        const form = document.getElementById('adminForm');
+        const statusDiv = document.getElementById('status');
+        const createBtn = document.getElementById('createBtn');
+
+        // Show status message
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        // Create admin user
+        async function createAdminUser(email, password, name, role, department) {
+            try {
+                showStatus('Creating user account...', 'info');
+                
+                // Create Firebase Auth user
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Update profile
+                await updateProfile(user, {
+                    displayName: name
+                });
+
+                showStatus('Creating user profile...', 'info');
+
+                // Create user document in Firestore
+                const userProfile = {
+                    uid: user.uid,
+                    email: email,
+                    name: name,
+                    role: role,
+                    department: department || 'Administration',
+                    isActive: true,
+                    isEmailVerified: user.emailVerified,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    lastLogin: null,
+                    createdBy: 'admin-setup',
+                    permissions: getDefaultPermissions(role)
+                };
+
+                await setDoc(doc(db, 'users', user.uid), userProfile);
+
+                // Log the creation in history
+                const historyEntry = {
+                    actionId: generateActionId(),
+                    action: 'user_created',
+                    description: `Admin user created: ${name} (${email})`,
+                    userId: 'admin-setup',
+                    userEmail: 'system',
+                    userRole: 'system',
+                    targetType: 'user',
+                    targetId: user.uid,
+                    targetName: name,
+                    changes: {
+                        after: {
+                            email: email,
+                            name: name,
+                            role: role,
+                            department: department
+                        }
+                    },
+                    timestamp: serverTimestamp(),
+                    success: true,
+                    riskLevel: 'medium'
+                };
+
+                await setDoc(doc(db, 'history', generateActionId()), historyEntry);
+
+                showStatus(
+                    `✅ Success! Admin user created successfully.\n\n` +
+                    `Email: ${email}\n` +
+                    `Role: ${role}\n` +
+                    `You can now login with these credentials.`,
+                    'success'
+                );
+
+                // Reset form
+                form.reset();
+
+            } catch (error) {
+                console.error('Error creating admin user:', error);
+                let errorMessage = 'Failed to create admin user: ';
+                
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        errorMessage += 'This email is already registered.';
+                        break;
+                    case 'auth/weak-password':
+                        errorMessage += 'Password should be at least 6 characters.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage += 'Invalid email address.';
+                        break;
+                    default:
+                        errorMessage += error.message;
+                }
+                
+                showStatus(errorMessage, 'error');
+            }
+        }
+
+        // Get default permissions based on role
+        function getDefaultPermissions(role) {
+            if (role === 'admin') {
+                return {
+                    canCreateInvoices: true,
+                    canEditInvoices: true,
+                    canDeleteInvoices: true,
+                    canViewInvoices: true,
+                    canViewCustomers: true,
+                    canCreateCustomers: true,
+                    canEditCustomers: true,
+                    canDeleteCustomers: true,
+                    canManageRooms: true,
+                    canViewRooms: true,
+                    canManageUsers: true,
+                    canViewUsers: true,
+                    canViewHistory: true,
+                    canViewReports: true,
+                    canGenerateReports: true,
+                    canExportData: true,
+                    canViewFiles: true
+                };
+            } else {
+                return {
+                    canCreateInvoices: true,
+                    canEditInvoices: false,
+                    canDeleteInvoices: false,
+                    canViewInvoices: true,
+                    canViewCustomers: true,
+                    canCreateCustomers: true,
+                    canEditCustomers: false,
+                    canDeleteCustomers: false,
+                    canManageRooms: false,
+                    canViewRooms: true,
+                    canManageUsers: false,
+                    canViewUsers: false,
+                    canViewHistory: false,
+                    canViewReports: false,
+                    canGenerateReports: false,
+                    canExportData: false,
+                    canViewFiles: false
+                };
+            }
+        }
+
+        // Generate action ID
+        function generateActionId() {
+            return 'setup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const name = document.getElementById('name').value;
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('role').value;
+            const department = document.getElementById('department').value;
+
+            if (password.length < 6) {
+                showStatus('Password must be at least 6 characters long.', 'error');
+                return;
+            }
+
+            createBtn.disabled = true;
+            createBtn.textContent = 'Creating...';
+
+            try {
+                await createAdminUser(email, password, name, role, department);
+            } finally {
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create Admin User';
+            }
+        });
+
+        // Show initial ready status
+        showStatus('Ready to create admin user. Fill in the form above.', 'info');
+    </script>
+</body>
+</html>

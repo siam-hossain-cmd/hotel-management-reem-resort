@@ -7,10 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "upload-rooms": "node uploadRoomsClean.js",
+    "create-admin": "node createAdminRole.js"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "firebase": "^12.3.0",
+    "firebase-admin": "^13.5.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "lucide-react": "^0.544.0",

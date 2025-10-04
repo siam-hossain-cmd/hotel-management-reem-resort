@@ -145,7 +145,17 @@ const generateInvoiceHTML = (invoice) => {
       <div style="display: flex; justify-content: flex-end; margin-bottom: 40px;">
         <div style="width: 350px;">
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
-            <span>Room Charges:</span>
+            <span>Original Room Charges:</span>
+            <span>৳${(invoice.originalSubtotal || 0).toFixed(2)}</span>
+          </div>
+          ${(invoice.totalDiscount && invoice.totalDiscount > 0) ? `
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; color: #dc2626;">
+            <span>Total Discount Applied:</span>
+            <span>-৳${invoice.totalDiscount.toFixed(2)}</span>
+          </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+            <span>Room Charges After Discount:</span>
             <span>৳${invoice.subtotal.toFixed(2)}</span>
           </div>
           ${invoice.additionalTotal && invoice.additionalTotal > 0 ? `
@@ -154,12 +164,16 @@ const generateInvoiceHTML = (invoice) => {
             <span>৳${invoice.additionalTotal.toFixed(2)}</span>
           </div>
           ` : ''}
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 2px solid #e2e8f0; font-weight: 600;">
+            <span>Subtotal (Before VAT):</span>
+            <span>৳${(invoice.subtotal + invoice.additionalTotal).toFixed(2)}</span>
+          </div>
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
             <span>VAT (${invoice.taxRate}%):</span>
             <span>৳${invoice.tax.toFixed(2)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 18px; border-top: 2px solid #e2e8f0; color: #1e293b;">
-            <span>Total Amount:</span>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 18px; border-top: 2px solid #3b82f6; border-bottom: 2px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
+            <span>Final Total Amount:</span>
             <span>৳${invoice.total.toFixed(2)}</span>
           </div>
           ${invoice.totalPaid && invoice.totalPaid > 0 ? `

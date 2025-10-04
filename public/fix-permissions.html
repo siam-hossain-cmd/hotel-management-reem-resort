@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix User Permissions</title>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+        import { getFirestore, collection, getDocs, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+        // Your Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDQdwrJPIl0rIMh5b9JaKOD9Zz3bNJd1R4",
+            authDomain: "invoice-management-d6ea7.firebaseapp.com",
+            projectId: "invoice-management-d6ea7",
+            storageBucket: "invoice-management-d6ea7.appspot.com",
+            messagingSenderId: "286610896823",
+            appId: "1:286610896823:web:2ee1c5e7c124c1b7a8d6f7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Role and permission definitions
+        const ROLES = {
+            MASTER_ADMIN: 'MasterAdmin',
+            FULL_ADMIN: 'FullAdmin', 
+            ADMIN: 'Admin',
+            FRONT_DESK: 'FrontDesk'
+        };
+
+        const PERMISSIONS = {
+            VIEW_DASHBOARD: 'view_dashboard',
+            VIEW_ANALYTICS: 'view_analytics',
+            CREATE_INVOICE: 'create_invoice',
+            VIEW_INVOICES: 'view_invoices',
+            EDIT_INVOICES: 'edit_invoices',
+            DELETE_INVOICES: 'delete_invoices',
+            EXPORT_INVOICES: 'export_invoices',
+            VIEW_CUSTOMERS: 'view_customers',
+            CREATE_CUSTOMERS: 'create_customers',
+            EDIT_CUSTOMERS: 'edit_customers',
+            DELETE_CUSTOMERS: 'delete_customers',
+            VIEW_ROOMS: 'view_rooms',
+            CREATE_ROOMS: 'create_rooms',
+            EDIT_ROOMS: 'edit_rooms',
+            DELETE_ROOMS: 'delete_rooms',
+            UPLOAD_ROOMS: 'upload_rooms',
+            MANAGE_ROOM_INVENTORY: 'manage_room_inventory',
+            VIEW_USERS: 'view_users',
+            CREATE_USERS: 'create_users',
+            EDIT_USERS: 'edit_users',
+            DELETE_USERS: 'delete_users',
+            MANAGE_ROLES: 'manage_roles',
+            VIEW_REPORTS: 'view_reports',
+            CREATE_REPORTS: 'create_reports',
+            EXPORT_REPORTS: 'export_reports',
+            VIEW_FINANCIAL_REPORTS: 'view_financial_reports',
+            MANAGE_SETTINGS: 'manage_settings',
+            VIEW_LOGS: 'view_logs',
+            BACKUP_DATA: 'backup_data',
+            RESTORE_DATA: 'restore_data',
+            MANAGE_BILLING: 'manage_billing',
+            CONFIGURE_TAXES: 'configure_taxes',
+            MANAGE_DISCOUNTS: 'manage_discounts',
+            ACCESS_API: 'access_api',
+            VIEW_AUDIT_LOGS: 'view_audit_logs',
+            MANAGE_SECURITY: 'manage_security',
+            RESET_PASSWORDS: 'reset_passwords'
+        };
+
+        const ROLE_PERMISSIONS = {
+            [ROLES.MASTER_ADMIN]: [
+                PERMISSIONS.VIEW_DASHBOARD,
+                PERMISSIONS.VIEW_ANALYTICS,
+                PERMISSIONS.CREATE_INVOICE,
+                PERMISSIONS.VIEW_INVOICES,
+                PERMISSIONS.EDIT_INVOICES,
+                PERMISSIONS.DELETE_INVOICES,
+                PERMISSIONS.EXPORT_INVOICES,
+                PERMISSIONS.VIEW_CUSTOMERS,
+                PERMISSIONS.CREATE_CUSTOMERS,
+                PERMISSIONS.EDIT_CUSTOMERS,
+                PERMISSIONS.DELETE_CUSTOMERS,
+                PERMISSIONS.VIEW_ROOMS,
+                PERMISSIONS.CREATE_ROOMS,
+                PERMISSIONS.EDIT_ROOMS,
+                PERMISSIONS.DELETE_ROOMS,
+                PERMISSIONS.UPLOAD_ROOMS,
+                PERMISSIONS.MANAGE_ROOM_INVENTORY,
+                PERMISSIONS.VIEW_USERS,
+                PERMISSIONS.CREATE_USERS,
+                PERMISSIONS.EDIT_USERS,
+                PERMISSIONS.DELETE_USERS,
+                PERMISSIONS.MANAGE_ROLES,
+                PERMISSIONS.VIEW_REPORTS,
+                PERMISSIONS.CREATE_REPORTS,
+                PERMISSIONS.EXPORT_REPORTS,
+                PERMISSIONS.VIEW_FINANCIAL_REPORTS,
+                PERMISSIONS.MANAGE_SETTINGS,
+                PERMISSIONS.VIEW_LOGS,
+                PERMISSIONS.BACKUP_DATA,
+                PERMISSIONS.RESTORE_DATA,
+                PERMISSIONS.MANAGE_BILLING,
+                PERMISSIONS.CONFIGURE_TAXES,
+                PERMISSIONS.MANAGE_DISCOUNTS,
+                PERMISSIONS.ACCESS_API,
+                PERMISSIONS.VIEW_AUDIT_LOGS,
+                PERMISSIONS.MANAGE_SECURITY,
+                PERMISSIONS.RESET_PASSWORDS
+            ],
+            
+            [ROLES.FULL_ADMIN]: [
+                PERMISSIONS.VIEW_DASHBOARD,
+                PERMISSIONS.VIEW_ANALYTICS,
+                PERMISSIONS.CREATE_INVOICE,
+                PERMISSIONS.VIEW_INVOICES,
+                PERMISSIONS.EDIT_INVOICES,
+                PERMISSIONS.DELETE_INVOICES,
+                PERMISSIONS.EXPORT_INVOICES,
+                PERMISSIONS.VIEW_CUSTOMERS,
+                PERMISSIONS.CREATE_CUSTOMERS,
+                PERMISSIONS.EDIT_CUSTOMERS,
+                PERMISSIONS.DELETE_CUSTOMERS,
+                PERMISSIONS.VIEW_ROOMS,
+                PERMISSIONS.CREATE_ROOMS,
+                PERMISSIONS.EDIT_ROOMS,
+                PERMISSIONS.DELETE_ROOMS,
+                PERMISSIONS.UPLOAD_ROOMS,
+                PERMISSIONS.MANAGE_ROOM_INVENTORY,
+                PERMISSIONS.VIEW_REPORTS,
+                PERMISSIONS.CREATE_REPORTS,
+                PERMISSIONS.EXPORT_REPORTS,
+                PERMISSIONS.VIEW_FINANCIAL_REPORTS,
+                PERMISSIONS.MANAGE_BILLING,
+                PERMISSIONS.CONFIGURE_TAXES,
+                PERMISSIONS.MANAGE_DISCOUNTS,
+                PERMISSIONS.ACCESS_API
+            ],
+            
+            [ROLES.ADMIN]: [
+                PERMISSIONS.VIEW_DASHBOARD,
+                PERMISSIONS.CREATE_INVOICE,
+                PERMISSIONS.VIEW_INVOICES,
+                PERMISSIONS.EDIT_INVOICES,
+                PERMISSIONS.EXPORT_INVOICES,
+                PERMISSIONS.VIEW_CUSTOMERS,
+                PERMISSIONS.CREATE_CUSTOMERS,
+                PERMISSIONS.EDIT_CUSTOMERS,
+                PERMISSIONS.VIEW_ROOMS,
+                PERMISSIONS.CREATE_ROOMS,
+                PERMISSIONS.EDIT_ROOMS,
+                PERMISSIONS.VIEW_REPORTS,
+                PERMISSIONS.CREATE_REPORTS,
+                PERMISSIONS.EXPORT_REPORTS
+            ],
+            
+            [ROLES.FRONT_DESK]: [
+                // View only - can see customers and invoices but cannot create invoices or edit rooms
+                PERMISSIONS.VIEW_DASHBOARD,
+                PERMISSIONS.VIEW_INVOICES,
+                PERMISSIONS.VIEW_CUSTOMERS,
+                PERMISSIONS.VIEW_ROOMS,
+                PERMISSIONS.VIEW_REPORTS
+            ]
+        };
+
+        async function fixUserPermissions() {
+            try {
+                console.log('🔄 Starting user permissions fix...');
+                document.getElementById('output').innerHTML += '🔄 Starting user permissions fix...<br>';
+                
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                
+                if (usersSnapshot.empty) {
+                    console.log('❌ No users found');
+                    document.getElementById('output').innerHTML += '❌ No users found<br>';
+                    return;
+                }
+                
+                console.log(`📊 Found ${usersSnapshot.size} users`);
+                document.getElementById('output').innerHTML += `📊 Found ${usersSnapshot.size} users<br>`;
+                
+                for (const userDoc of usersSnapshot.docs) {
+                    const userData = userDoc.data();
+                    const userId = userDoc.id;
+                    
+                    console.log(`👤 Processing: ${userData.email} (${userData.role})`);
+                    document.getElementById('output').innerHTML += `👤 Processing: ${userData.email} (${userData.role})<br>`;
+                    
+                    const rolePermissions = ROLE_PERMISSIONS[userData.role] || [];
+                    
+                    if (rolePermissions.length === 0) {
+                        console.log(`⚠️ No permissions for role: ${userData.role}`);
+                        document.getElementById('output').innerHTML += `⚠️ No permissions for role: ${userData.role}<br>`;
+                        continue;
+                    }
+                    
+                    await updateDoc(doc(db, 'users', userId), {
+                        permissions: rolePermissions,
+                        isActive: userData.isActive !== false ? true : userData.isActive,
+                        updatedAt: new Date().toISOString()
+                    });
+                    
+                    const canViewCustomers = rolePermissions.includes(PERMISSIONS.VIEW_CUSTOMERS);
+                    const canViewInvoices = rolePermissions.includes(PERMISSIONS.VIEW_INVOICES);
+                    const canCreateInvoices = rolePermissions.includes(PERMISSIONS.CREATE_INVOICE);
+                    const canEditRooms = rolePermissions.includes(PERMISSIONS.EDIT_ROOMS);
+                    
+                    console.log(`✅ Updated ${userData.email}:`);
+                    console.log(`   - canViewCustomers: ${canViewCustomers}`);
+                    console.log(`   - canViewInvoices: ${canViewInvoices}`);
+                    console.log(`   - canCreateInvoices: ${canCreateInvoices}`);
+                    console.log(`   - canEditRooms: ${canEditRooms}`);
+                    
+                    document.getElementById('output').innerHTML += 
+                        `✅ Updated ${userData.email}:<br>` +
+                        `&nbsp;&nbsp;- canViewCustomers: ${canViewCustomers}<br>` +
+                        `&nbsp;&nbsp;- canViewInvoices: ${canViewInvoices}<br>` +
+                        `&nbsp;&nbsp;- canCreateInvoices: ${canCreateInvoices}<br>` +
+                        `&nbsp;&nbsp;- canEditRooms: ${canEditRooms}<br><br>`;
+                }
+                
+                console.log('🎉 All users updated successfully!');
+                document.getElementById('output').innerHTML += '🎉 All users updated successfully!<br>';
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                document.getElementById('output').innerHTML += `❌ Error: ${error.message}<br>`;
+            }
+        }
+
+        // Add event listener when page loads
+        window.addEventListener('load', () => {
+            document.getElementById('fixButton').addEventListener('click', fixUserPermissions);
+        });
+    </script>
+</head>
+<body>
+    <h1>Fix User Permissions</h1>
+    <p>This will update all users with correct role-based permissions including canViewCustomers and canViewInvoices.</p>
+    
+    <button id="fixButton">Fix User Permissions</button>
+    
+    <h2>Output:</h2>
+    <div id="output" style="background: #f5f5f5; padding: 10px; min-height: 100px; font-family: monospace; white-space: pre-wrap;"></div>
+</body>
+</html>

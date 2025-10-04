@@ -1,19 +1,58 @@
 import React, { useState } from 'react';
-import { Plus, Search, Filter, Eye, Edit, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, Trash2, Download, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
 
 const Invoices = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+  const { canPerformAction, user } = useAuth();
 
-  const invoices = [
-    { id: 'INV-001', customer: 'John Doe', amount: 1250, status: 'Paid', date: '2024-01-15', dueDate: '2024-01-30', checkInDate: '2024-01-10', checkOutDate: '2024-01-12', adminName: 'Admin User' },
-    { id: 'INV-002', customer: 'Jane Smith', amount: 850, status: 'Pending', date: '2024-01-14', dueDate: '2024-01-29', checkInDate: '2024-01-15', checkOutDate: '2024-01-16', adminName: 'Admin User' },
-    { id: 'INV-003', customer: 'Bob Wilson', amount: 2100, status: 'Paid', date: '2024-01-13', dueDate: '2024-01-28', checkInDate: '2024-01-18', checkOutDate: '2024-01-20', adminName: 'Manager' },
-    { id: 'INV-004', customer: 'Alice Brown', amount: 750, status: 'Overdue', date: '2024-01-10', dueDate: '2024-01-25', checkInDate: '2024-01-20', checkOutDate: '2024-01-21', adminName: 'Admin User' },
-    { id: 'INV-005', customer: 'Charlie Davis', amount: 1500, status: 'Draft', date: '2024-01-12', dueDate: '2024-01-27', checkInDate: '2024-01-25', checkOutDate: '2024-01-27', adminName: 'Receptionist' },
-  ];
+  // Initialize invoices with state management
+  const [invoices, setInvoices] = useState([
+    { 
+      id: 'INV-001', 
+      customer: 'John Doe', 
+      amount: 1250, 
+      status: 'Paid', 
+      date: '2024-01-15', 
+      dueDate: '2024-01-30', 
+      checkInDate: '2024-01-10', 
+      checkOutDate: '2024-01-12', 
+      adminName: 'Admin User',
+      roomNumber: '101',
+      roomType: 'Deluxe Room'
+    },
+    { 
+      id: 'INV-002', 
+      customer: 'Jane Smith', 
+      amount: 850, 
+      status: 'Pending', 
+      date: '2024-01-14', 
+      dueDate: '2024-01-29', 
+      checkInDate: '2024-01-15', 
+      checkOutDate: '2024-01-16', 
+      adminName: 'Admin User',
+      roomNumber: '205',
+      roomType: 'Standard Room'
+    },
+    { 
+      id: 'INV-003', 
+      customer: 'Bob Wilson', 
+      amount: 2100, 
+      status: 'Paid', 
+      date: '2024-01-13', 
+      dueDate: '2024-01-28', 
+      checkInDate: '2024-01-18', 
+      checkOutDate: '2024-01-20', 
+      adminName: 'Manager',
+      roomNumber: '301',
+      roomType: 'Suite'
+    }
+  ]);
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = invoice.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -22,11 +61,31 @@ const Invoices = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const handleDelete = (invoiceId) => {
-    if (window.confirm('Are you sure you want to delete this invoice?')) {
-      // Handle delete logic here
-      console.log('Deleting invoice:', invoiceId);
+  const handleDeleteClick = (invoice) => {
+    setInvoiceToDelete(invoice);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (invoiceToDelete) {
+      setInvoices(prevInvoices => 
+        prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
+      );
+      console.log('✅ Invoice deleted:', invoiceToDelete.id);
+      setShowDeleteModal(false);
+      setInvoiceToDelete(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setInvoiceToDelete(null);
+  };
+
+  const canDeleteInvoice = (invoice) => {
+    // Only MasterAdmin can delete invoices, or if user created the invoice
+    return canPerformAction('delete_invoice') || 
+           (invoice.adminName === user?.name && canPerformAction('edit_invoice'));
   };
 
   const handleView = (invoice) => {
@@ -87,10 +146,12 @@ const Invoices = () => {
     <div className="invoices-page">
       <div className="page-header">
         <h1>Invoices</h1>
-        <Link to="/create-invoice" className="btn btn-primary">
-          <Plus size={20} />
-          Create Invoice
-        </Link>
+        {canPerformAction('create_invoice') && (
+          <Link to="/create-invoice" className="btn btn-primary">
+            <Plus size={20} />
+            Create Invoice
+          </Link>
+        )}
       </div>
 
       <div className="filters">
@@ -152,9 +213,11 @@ const Invoices = () => {
               <button className="action-btn" title="View" onClick={() => handleView(invoice)}>
                 <Eye size={16} />
               </button>
-              <button className="action-btn" title="Edit">
-                <Edit size={16} />
-              </button>
+              {canPerformAction('edit_invoice') && (
+                <button className="action-btn" title="Edit">
+                  <Edit size={16} />
+                </button>
+              )}
               <button 
                 className="action-btn" 
                 title="Download"
@@ -162,13 +225,15 @@ const Invoices = () => {
               >
                 <Download size={16} />
               </button>
-              <button 
-                className="action-btn delete" 
-                title="Delete"
-                onClick={() => handleDelete(invoice.id)}
-              >
-                <Trash2 size={16} />
-              </button>
+              {canDeleteInvoice(invoice) && (
+                <button 
+                  className="action-btn delete" 
+                  title="Delete Invoice"
+                  onClick={() => handleDeleteClick(invoice)}
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -177,6 +242,44 @@ const Invoices = () => {
       {filteredInvoices.length === 0 && (
         <div className="empty-state">
           <p>No invoices found matching your criteria.</p>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <AlertTriangle size={24} className="warning-icon" />
+              <h3>Confirm Delete</h3>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to delete this invoice?</p>
+              <div className="invoice-details">
+                <strong>Invoice ID:</strong> {invoiceToDelete?.id}<br />
+                <strong>Customer:</strong> {invoiceToDelete?.customer}<br />
+                <strong>Amount:</strong> ৳{invoiceToDelete?.amount.toLocaleString()}
+              </div>
+              <p className="warning-text">
+                <strong>Warning:</strong> This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleCancelDelete}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-danger" 
+                onClick={handleConfirmDelete}
+              >
+                <Trash2 size={16} />
+                Delete Invoice
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

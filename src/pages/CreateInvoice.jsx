@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, Send, Plus, Trash2, Eye, Download } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
+import { roomService } from '../firebase/roomService';
 
 const CreateInvoice = () => {
   const [invoice, setInvoice] = useState({
@@ -20,10 +21,14 @@ const CreateInvoice = () => {
       { 
         id: uuidv4(), 
         roomNumber: '', 
+        roomData: null,
+        roomType: '',
         checkInDate: '', 
         checkOutDate: '', 
         totalNights: 0,
         perNightCost: 0, 
+        discountPercentage: 0,
+        discountAmount: 0,
         guestCount: 1,
         amount: 0 
       }
@@ -32,6 +37,8 @@ const CreateInvoice = () => {
     payments: [],
     notes: '',
     terms: 'Payment is due within 30 days',
+    originalSubtotal: 0,
+    totalDiscount: 0,
     subtotal: 0,
     additionalTotal: 0,
     tax: 0,
@@ -48,16 +55,41 @@ const CreateInvoice = () => {
     description: ''
   });
 
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load rooms from Firebase on component mount
+  useEffect(() => {
+    const loadRooms = async () => {
+      try {
+        setLoading(true);
+        const rooms = await roomService.getAllRooms();
+        setAvailableRooms(rooms);
+      } catch (error) {
+        console.error('Error loading rooms:', error);
+        alert('Failed to load room data. Please refresh the page.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRooms();
+  }, []);
+
   const addItem = () => {
     setInvoice(prev => ({
       ...prev,
       items: [...prev.items, { 
         id: uuidv4(), 
         roomNumber: '', 
+        roomData: null,
+        roomType: '',
         checkInDate: '', 
         checkOutDate: '', 
         totalNights: 0,
         perNightCost: 0, 
+        discountPercentage: 0,
+        discountAmount: 0,
         guestCount: 1,
         amount: 0 
       }]
@@ -78,6 +110,20 @@ const CreateInvoice = () => {
         if (item.id === itemId) {
           const updatedItem = { ...item, [field]: value };
           
+          // Handle room selection
+          if (field === 'roomNumber') {
+            const selectedRoom = availableRooms.find(room => room.roomNumber === value);
+            if (selectedRoom) {
+              updatedItem.roomData = selectedRoom;
+              updatedItem.roomType = selectedRoom.roomType;
+              updatedItem.perNightCost = selectedRoom.pricePerNight;
+            } else {
+              updatedItem.roomData = null;
+              updatedItem.roomType = '';
+              updatedItem.perNightCost = 0;
+            }
+          }
+          
           // Calculate total nights if check-in or check-out date changes
           if (field === 'checkInDate' || field === 'checkOutDate') {
             if (updatedItem.checkInDate && updatedItem.checkOutDate) {
@@ -89,10 +135,17 @@ const CreateInvoice = () => {
             }
           }
           
-          // Calculate amount based on nights and per night cost
-          if (field === 'totalNights' || field === 'perNightCost' || field === 'checkInDate' || field === 'checkOutDate') {
-            updatedItem.amount = updatedItem.totalNights * updatedItem.perNightCost;
+          // Calculate base amount
+          const baseAmount = updatedItem.totalNights * updatedItem.perNightCost;
+          
+          // Calculate discount amount
+          if (field === 'discountPercentage' || field === 'totalNights' || field === 'perNightCost' || 
+              field === 'checkInDate' || field === 'checkOutDate' || field === 'roomNumber') {
+            updatedItem.discountAmount = (baseAmount * updatedItem.discountPercentage) / 100;
           }
+          
+          // Calculate final amount after discount
+          updatedItem.amount = baseAmount - updatedItem.discountAmount;
           
           return updatedItem;
         }
@@ -104,15 +157,34 @@ const CreateInvoice = () => {
   };
 
   const calculateTotals = () => {
+    // Calculate original amounts (before discount)
+    const originalSubtotal = invoice.items.reduce((sum, item) => {
+      return sum + (item.totalNights * item.perNightCost);
+    }, 0);
+    
+    // Calculate total discount amount
+    const totalDiscount = invoice.items.reduce((sum, item) => sum + item.discountAmount, 0);
+    
+    // Calculate subtotal after discount
     const subtotal = invoice.items.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Additional charges
     const additionalTotal = invoice.additionalCharges.reduce((sum, charge) => sum + charge.amount, 0);
+    
+    // Calculate VAT on discounted amount + additional charges
     const tax = ((subtotal + additionalTotal) * invoice.taxRate) / 100;
+    
+    // Final total
     const total = subtotal + additionalTotal + tax;
+    
+    // Payment calculations
     const totalPaid = invoice.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const dueAmount = total - totalPaid;
     
     setInvoice(prev => ({
       ...prev,
+      originalSubtotal,
+      totalDiscount,
       subtotal,
       additionalTotal,
       tax,
@@ -359,74 +431,148 @@ const CreateInvoice = () => {
             </button>
           </div>
           
-          <div className="items-table">
-            <div className="table-header hotel-header">
-              <div>Room Number</div>
-              <div>Check-in Date</div>
-              <div>Check-out Date</div>
-              <div>Total Nights</div>
-              <div>Guests</div>
-              <div>Per Night Cost</div>
-              <div>Total Amount</div>
-              <div>Actions</div>
-            </div>
-            
-            {invoice.items.map((item) => (
-              <div key={item.id} className="table-row hotel-row">
-                <div className="form-group">
-                  <input 
-                    type="text" 
-                    placeholder="Room 101"
-                    value={item.roomNumber}
-                    onChange={(e) => updateItem(item.id, 'roomNumber', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <input 
-                    type="date" 
-                    value={item.checkInDate}
-                    onChange={(e) => updateItem(item.id, 'checkInDate', e.target.value)}
-                  />
-                </div>
-                <div className="form-group">
-                  <input 
-                    type="date" 
-                    value={item.checkOutDate}
-                    onChange={(e) => updateItem(item.id, 'checkOutDate', e.target.value)}
-                  />
-                </div>
-                <div className="nights-display">
-                  {item.totalNights} {item.totalNights === 1 ? 'night' : 'nights'}
-                </div>
-                <div className="form-group">
-                  <input 
-                    type="number" 
-                    min="1"
-                    value={item.guestCount}
-                    onChange={(e) => updateItem(item.id, 'guestCount', parseInt(e.target.value) || 1)}
-                  />
-                </div>
-                <div className="form-group">
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    placeholder="0.00"
-                    value={item.perNightCost}
-                    onChange={(e) => updateItem(item.id, 'perNightCost', parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="amount">
-                  ৳{item.amount.toFixed(2)}
-                </div>
-                <div className="actions">
+          <div className="room-booking-cards">
+            {invoice.items.map((item, index) => (
+              <div key={item.id} className="room-booking-card">
+                <div className="card-header">
+                  <h3>Room Booking #{index + 1}</h3>
                   {invoice.items.length > 1 && (
                     <button 
                       className="action-btn delete" 
                       onClick={() => removeItem(item.id)}
+                      title="Remove Room"
                     >
                       <Trash2 size={16} />
                     </button>
                   )}
+                </div>
+
+                <div className="card-content">
+                  <div className="room-selection-row">
+                    <div className="form-group">
+                      <label>Select Room</label>
+                      {loading ? (
+                        <input type="text" disabled value="Loading rooms..." />
+                      ) : (
+                        <select 
+                          value={item.roomNumber}
+                          onChange={(e) => updateItem(item.id, 'roomNumber', e.target.value)}
+                        >
+                          <option value="">Choose a room</option>
+                          {availableRooms.map((room) => (
+                            <option key={room.id} value={room.roomNumber}>
+                              {room.roomNumber} - {room.roomType}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Room Type</label>
+                      <input 
+                        type="text" 
+                        value={item.roomType || 'Select room first'} 
+                        readOnly 
+                        className="readonly-field"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Number of Guests</label>
+                      <input 
+                        type="number" 
+                        min="1"
+                        max="10"
+                        value={item.guestCount}
+                        onChange={(e) => updateItem(item.id, 'guestCount', parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="dates-row">
+                    <div className="form-group">
+                      <label>Check-in Date</label>
+                      <input 
+                        type="date" 
+                        value={item.checkInDate}
+                        onChange={(e) => updateItem(item.id, 'checkInDate', e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Check-out Date</label>
+                      <input 
+                        type="date" 
+                        value={item.checkOutDate}
+                        onChange={(e) => updateItem(item.id, 'checkOutDate', e.target.value)}
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Total Nights</label>
+                      <input 
+                        type="text" 
+                        value={`${item.totalNights} ${item.totalNights === 1 ? 'night' : 'nights'}`}
+                        readOnly 
+                        className="readonly-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pricing-row">
+                    <div className="form-group">
+                      <label>Original Price Per Night</label>
+                      <input 
+                        type="text" 
+                        value={`৳${item.perNightCost.toFixed(2)}`}
+                        readOnly 
+                        className="readonly-field"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Discount Percentage</label>
+                      <input 
+                        type="number" 
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        placeholder="0"
+                        value={item.discountPercentage}
+                        onChange={(e) => updateItem(item.id, 'discountPercentage', parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Price After Discount Per Night</label>
+                      <input 
+                        type="text" 
+                        value={`৳${(item.perNightCost * (1 - item.discountPercentage / 100)).toFixed(2)}`}
+                        readOnly 
+                        className="readonly-field discounted-price"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="totals-row">
+                    <div className="total-breakdown">
+                      <div className="total-item">
+                        <span className="label">Original Total:</span>
+                        <span className="value original-total">৳{(item.totalNights * item.perNightCost).toFixed(2)}</span>
+                      </div>
+                      {item.discountPercentage > 0 && (
+                        <div className="total-item">
+                          <span className="label">Discount Amount:</span>
+                          <span className="value discount-amount">-৳{item.discountAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="total-item final-total">
+                        <span className="label">Final Total:</span>
+                        <span className="value">৳{item.amount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -572,7 +718,17 @@ const CreateInvoice = () => {
           
           <div className="totals">
             <div className="total-row">
-              <span>Room Charges:</span>
+              <span>Original Room Charges:</span>
+              <span>৳{(invoice.originalSubtotal || 0).toFixed(2)}</span>
+            </div>
+            {(invoice.totalDiscount || 0) > 0 && (
+              <div className="total-row discount">
+                <span>Total Discount Applied:</span>
+                <span className="discount-value">-৳{(invoice.totalDiscount || 0).toFixed(2)}</span>
+              </div>
+            )}
+            <div className="total-row">
+              <span>Room Charges After Discount:</span>
               <span>৳{invoice.subtotal.toFixed(2)}</span>
             </div>
             {invoice.additionalTotal > 0 && (
@@ -581,12 +737,16 @@ const CreateInvoice = () => {
                 <span>৳{invoice.additionalTotal.toFixed(2)}</span>
               </div>
             )}
+            <div className="total-row subtotal-before-vat">
+              <span>Subtotal (Before VAT):</span>
+              <span>৳{(invoice.subtotal + invoice.additionalTotal).toFixed(2)}</span>
+            </div>
             <div className="total-row">
               <span>VAT ({invoice.taxRate}%):</span>
               <span>৳{invoice.tax.toFixed(2)}</span>
             </div>
             <div className="total-row total">
-              <span>Total Amount:</span>
+              <span>Final Total Amount:</span>
               <span>৳{invoice.total.toFixed(2)}</span>
             </div>
             <div className="total-row paid">
