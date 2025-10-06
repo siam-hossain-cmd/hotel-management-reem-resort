@@ -6,12 +6,7 @@ const Customers = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   
-  const [customers, setCustomers] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com', phone: '+1-555-0123', address: '123 Main St, City, State 12345', totalInvoices: 5, totalAmount: 2500 },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', phone: '+1-555-0124', address: '456 Oak Ave, City, State 12346', totalInvoices: 3, totalAmount: 1800 },
-    { id: 3, name: 'Bob Wilson', email: 'bob@example.com', phone: '+1-555-0125', address: '789 Pine Rd, City, State 12347', totalInvoices: 7, totalAmount: 4200 },
-    { id: 4, name: 'Alice Brown', email: 'alice@example.com', phone: '+1-555-0126', address: '321 Elm St, City, State 12348', totalInvoices: 2, totalAmount: 950 },
-  ]);
+  const [customers, setCustomers] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -207,7 +202,7 @@ const Customers = () => {
 
       {filteredCustomers.length === 0 && (
         <div className="empty-state">
-          <p>No customers found matching your criteria.</p>
+          <p>{searchTerm ? 'No customers found matching your criteria.' : 'No customers added yet. Click "Add Customer" to get started.'}</p>
         </div>
       )}
     </div>

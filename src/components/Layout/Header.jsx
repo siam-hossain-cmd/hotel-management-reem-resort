@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, User, LogOut, Shield, UserCheck, Settings, Activity } from 'lucide-react';
+import { Bell, User, LogOut, Shield, UserCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Header = () => {
@@ -12,40 +12,9 @@ const Header = () => {
   }, [user]);
 
   const loadNotifications = async () => {
-    // Mock notifications - replace with actual service
-    const mockNotifications = [
-      {
-        id: 1,
-        type: 'security',
-        message: 'New login detected from different location',
-        timestamp: '5 minutes ago',
-        read: false
-      },
-      {
-        id: 2,
-        type: 'invoice',
-        message: 'Invoice INV-001 has been paid',
-        timestamp: '1 hour ago',
-        read: false
-      },
-      {
-        id: 3,
-        type: 'system',
-        message: 'System backup completed successfully',
-        timestamp: '2 hours ago',
-        read: true
-      }
-    ];
-
-    // Filter notifications based on permissions
-    const filteredNotifications = mockNotifications.filter(notification => {
-      if (notification.type === 'security') return isAdmin();
-      if (notification.type === 'invoice') return hasPermission('canViewInvoices');
-      if (notification.type === 'system') return isAdmin();
-      return true;
-    });
-
-    setNotifications(filteredNotifications);
+    // Load actual notifications from database
+    // For now, start with empty array until real notifications are implemented
+    setNotifications([]);
   };
 
   const handleLogout = async () => {
@@ -144,18 +113,6 @@ const Header = () => {
             )}
           </div>
 
-          {/* Quick Actions */}
-          {isAdmin() && (
-            <div className="quick-actions">
-              <button className="action-btn" title="Activity Monitor">
-                <Activity size={18} />
-              </button>
-              <button className="action-btn" title="System Settings">
-                <Settings size={18} />
-              </button>
-            </div>
-          )}
-          
           {/* User Menu */}
           <div className="user-menu">
             <div className="user-info">
@@ -182,14 +139,6 @@ const Header = () => {
             >
               <LogOut size={18} />
             </button>
-          </div>
-
-          {/* Security Indicator */}
-          <div className="security-indicator">
-            <Shield size={16} />
-            <span className="security-level">
-              {isAdmin() ? 'High Security' : 'Standard'}
-            </span>
           </div>
         </div>
       </div>

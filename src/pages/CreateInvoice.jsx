@@ -1,10 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Send, Plus, Trash2, Eye, Download } from 'lucide-react';
+import { Save, Send, Plus, Trash2, Eye, Download, Printer } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
+import { generateInvoicePDF, previewInvoice, printInvoicePDF } from '../utils/pdfGenerator';
 import { roomService } from '../firebase/roomService';
+import { invoiceService } from '../firebase/invoiceService';
+import { useAuth } from '../contexts/AuthContext';
 
 const CreateInvoice = () => {
+  const { user, isMasterAdmin } = useAuth();
+  
+  // Add loading state
+  if (!user) {
+    return (
+      <div className="create-invoice">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading invoice form...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Generate automatic admin name based on user role and info
+  const getAdminName = () => {
+    if (isMasterAdmin()) {
+      return 'master_admin';
+    } else {
+      // For admin users, use admin_[name] format
+      const userName = user?.name || user?.email?.split('@')[0] || 'admin';
+      return `admin_${userName.toLowerCase().replace(/\s+/g, '_')}`;
+    }
+  };
   const [invoice, setInvoice] = useState({
     id: `INV-${Date.now()}`,
     customerInfo: {
@@ -16,12 +42,11 @@ const CreateInvoice = () => {
     },
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: '',
-    adminName: 'Admin User', // Default admin name - can be updated based on logged-in user
+    adminName: '', // Will be set automatically based on logged-in user
     items: [
       { 
         id: uuidv4(), 
         roomNumber: '', 
-        roomData: null,
         roomType: '',
         checkInDate: '', 
         checkOutDate: '', 
@@ -49,6 +74,16 @@ const CreateInvoice = () => {
   });
 
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  
+  // Set admin name automatically when component mounts or user changes
+  useEffect(() => {
+    if (user) {
+      setInvoice(prev => ({
+        ...prev,
+        adminName: getAdminName()
+      }));
+    }
+  }, [user]);
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     method: 'cash',
@@ -82,7 +117,6 @@ const CreateInvoice = () => {
       items: [...prev.items, { 
         id: uuidv4(), 
         roomNumber: '', 
-        roomData: null,
         roomType: '',
         checkInDate: '', 
         checkOutDate: '', 
@@ -114,11 +148,9 @@ const CreateInvoice = () => {
           if (field === 'roomNumber') {
             const selectedRoom = availableRooms.find(room => room.roomNumber === value);
             if (selectedRoom) {
-              updatedItem.roomData = selectedRoom;
               updatedItem.roomType = selectedRoom.roomType;
               updatedItem.perNightCost = selectedRoom.pricePerNight;
             } else {
-              updatedItem.roomData = null;
               updatedItem.roomType = '';
               updatedItem.perNightCost = 0;
             }
@@ -270,9 +302,98 @@ const CreateInvoice = () => {
     calculateTotals();
   }, [invoice.items, invoice.additionalCharges, invoice.payments, invoice.taxRate]);
 
-  const handleSave = () => {
-    console.log('Saving invoice:', invoice);
-    // Handle save logic here
+  const handleSave = async () => {
+    try {
+      console.log('Saving invoice to database:', invoice);
+      
+      // Clean the invoice data to remove undefined values and null values
+      const cleanInvoiceData = (data) => {
+        if (data === null || data === undefined) return null;
+        if (typeof data !== 'object') return data;
+        if (Array.isArray(data)) {
+          return data.map(item => cleanInvoiceData(item)).filter(item => item !== null);
+        }
+        
+        const cleaned = {};
+        for (const [key, value] of Object.entries(data)) {
+          if (value !== undefined && value !== null) {
+            if (typeof value === 'object') {
+              const cleanedValue = cleanInvoiceData(value);
+              if (cleanedValue !== null && Object.keys(cleanedValue).length > 0) {
+                cleaned[key] = cleanedValue;
+              }
+            } else {
+              cleaned[key] = value;
+            }
+          }
+        }
+        return Object.keys(cleaned).length > 0 ? cleaned : null;
+      };
+      
+      const cleanedInvoice = cleanInvoiceData(invoice);
+      
+      // Ensure required fields are present
+      const invoiceToSave = {
+        ...cleanedInvoice,
+        id: invoice.id || `INV-${Date.now()}`,
+        adminName: invoice.adminName || getAdminName(),
+        customerInfo: {
+          name: invoice.customerInfo?.name || '',
+          email: invoice.customerInfo?.email || '',
+          address: invoice.customerInfo?.address || '',
+          phone: invoice.customerInfo?.phone || '',
+          nid: invoice.customerInfo?.nid || ''
+        },
+        items: invoice.items?.map(item => ({
+          id: item.id || uuidv4(),
+          roomNumber: item.roomNumber || '',
+          roomType: item.roomType || '',
+          checkInDate: item.checkInDate || '',
+          checkOutDate: item.checkOutDate || '',
+          totalNights: item.totalNights || 0,
+          perNightCost: item.perNightCost || 0,
+          discountPercentage: item.discountPercentage || 0,
+          discountAmount: item.discountAmount || 0,
+          guestCount: item.guestCount || 1,
+          amount: item.amount || 0
+        })) || [],
+        additionalCharges: invoice.additionalCharges || [],
+        payments: invoice.payments || [],
+        notes: invoice.notes || '',
+        terms: invoice.terms || 'Payment is due within 30 days',
+        originalSubtotal: invoice.originalSubtotal || 0,
+        totalDiscount: invoice.totalDiscount || 0,
+        subtotal: invoice.subtotal || 0,
+        additionalTotal: invoice.additionalTotal || 0,
+        tax: invoice.tax || 0,
+        taxRate: invoice.taxRate || 10,
+        total: invoice.total || 0,
+        totalPaid: invoice.totalPaid || 0,
+        dueAmount: invoice.dueAmount || 0,
+        invoiceDate: invoice.invoiceDate || new Date().toISOString().split('T')[0],
+        dueDate: invoice.dueDate || ''
+      };
+      
+      console.log('Cleaned invoice data:', invoiceToSave);
+      
+      const result = await invoiceService.createInvoice(invoiceToSave);
+      
+      if (result.success) {
+        alert('Invoice saved successfully!');
+        console.log('Invoice saved with ID:', result.id);
+        // Update the invoice ID with the database ID
+        setInvoice(prev => ({ ...prev, dbId: result.id }));
+        return true;
+      } else {
+        alert('Failed to save invoice: ' + result.error);
+        console.error('Save failed:', result.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error saving invoice:', error);
+      alert('Error occurred while saving invoice.');
+      return false;
+    }
   };
 
   const handleSend = () => {
@@ -293,28 +414,33 @@ const CreateInvoice = () => {
     }
   };
 
+  const handleSaveAndPrint = async () => {
+    try {
+      // First save the invoice to database
+      console.log('Saving invoice to database...');
+      const saveSuccess = await handleSave();
+      
+      if (saveSuccess) {
+        // Then print the PDF (not download)
+        console.log('Printing invoice PDF...');
+        const printSuccess = await printInvoicePDF(invoice);
+        
+        if (printSuccess) {
+          console.log('Invoice saved and print dialog opened successfully');
+        } else {
+          alert('Invoice saved but failed to open print dialog. You can print from the invoice history.');
+        }
+      }
+    } catch (error) {
+      console.error('Error saving and printing:', error);
+      alert('Error occurred while saving and printing. Please try again.');
+    }
+  };
+
   return (
     <div className="create-invoice">
       <div className="page-header">
         <h1>Create New Invoice</h1>
-        <div className="actions">
-          <button className="btn btn-secondary" onClick={handlePreview}>
-            <Eye size={20} />
-            Preview
-          </button>
-          <button className="btn btn-secondary" onClick={handleDownloadPDF}>
-            <Download size={20} />
-            Download PDF
-          </button>
-          <button className="btn btn-secondary" onClick={handleSave}>
-            <Save size={20} />
-            Save Draft
-          </button>
-          <button className="btn btn-primary" onClick={handleSend}>
-            <Send size={20} />
-            Send Invoice
-          </button>
-        </div>
       </div>
 
       <div className="invoice-form">
@@ -344,12 +470,14 @@ const CreateInvoice = () => {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>Created By (Admin)</label>
+              <label>Created By (Admin) - Auto Assigned</label>
               <input 
                 type="text" 
-                placeholder="Admin name"
+                placeholder="Auto-assigned based on logged-in user"
                 value={invoice.adminName}
-                onChange={(e) => setInvoice(prev => ({ ...prev, adminName: e.target.value }))}
+                readOnly
+                className="readonly-field"
+                title="This field is automatically set based on your login credentials"
               />
             </div>
           </div>
@@ -757,6 +885,28 @@ const CreateInvoice = () => {
               <span>Due Amount:</span>
               <span>৳{invoice.dueAmount.toFixed(2)}</span>
             </div>
+          </div>
+        </div>
+        
+        {/* Action Buttons - Moved to bottom */}
+        <div className="invoice-actions-bottom">
+          <div className="actions-grid">
+            <button className="btn btn-secondary" onClick={handlePreview}>
+              <Eye size={20} />
+              Preview Invoice
+            </button>
+            <button className="btn btn-secondary" onClick={handleDownloadPDF}>
+              <Download size={20} />
+              Download PDF
+            </button>
+            <button className="btn btn-success" onClick={handleSaveAndPrint}>
+              <Printer size={20} />
+              Create Invoice & Print
+            </button>
+            <button className="btn btn-primary" onClick={handleSend}>
+              <Send size={20} />
+              Send Invoice
+            </button>
           </div>
         </div>
       </div>

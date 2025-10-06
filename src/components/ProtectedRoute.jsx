@@ -17,7 +17,7 @@ const ProtectedRoute = ({
     'admin': 5, // Backward compatibility for old admin role (highest level)
     'masterAdmin': 5, // Alternative master admin naming
     [ROLES.FRONT_DESK]: 1,
-    [ROLES.ADMIN]: 2,
+    [ROLES.ADMIN]: 3, // Updated: Admin should be level 3, same as FullAdmin for most access
     [ROLES.FULL_ADMIN]: 3,
     [ROLES.MASTER_ADMIN]: 5 // Highest level
   };

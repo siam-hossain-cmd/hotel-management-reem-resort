@@ -57,6 +57,76 @@ export const generateInvoicePDF = async (invoice, elementId = 'invoice-preview')
   }
 };
 
+export const printInvoicePDF = async (invoice) => {
+  try {
+    // Create a temporary div with the invoice content
+    const invoiceElement = document.createElement('div');
+    invoiceElement.innerHTML = generateInvoiceHTML(invoice);
+    invoiceElement.style.position = 'absolute';
+    invoiceElement.style.left = '-9999px';
+    invoiceElement.style.top = '-9999px';
+    invoiceElement.style.width = '800px';
+    invoiceElement.style.backgroundColor = 'white';
+    invoiceElement.style.padding = '40px';
+    invoiceElement.style.fontFamily = 'Arial, sans-serif';
+    
+    document.body.appendChild(invoiceElement);
+
+    // Convert to canvas
+    const canvas = await html2canvas(invoiceElement, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff'
+    });
+
+    // Remove temporary element
+    document.body.removeChild(invoiceElement);
+
+    // Create PDF
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF();
+    const imgWidth = 210;
+    const pageHeight = 295;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    // Open print dialog instead of downloading
+    const pdfBlob = pdf.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    
+    // Create a new window for printing
+    const printWindow = window.open(pdfUrl, '_blank');
+    if (printWindow) {
+      printWindow.onload = function() {
+        printWindow.print();
+        // Clean up the URL after printing
+        setTimeout(() => {
+          URL.revokeObjectURL(pdfUrl);
+          printWindow.close();
+        }, 1000);
+      };
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error printing PDF:', error);
+    return false;
+  }
+};
+
 const generateInvoiceHTML = (invoice) => {
   return `
     <div style="max-width: 800px; margin: 0 auto; padding: 40px; font-family: Arial, sans-serif; color: #333;">

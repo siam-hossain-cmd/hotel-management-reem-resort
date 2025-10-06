@@ -161,7 +161,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_ROOMS,
     PERMISSIONS.CREATE_ROOMS,
     PERMISSIONS.EDIT_ROOMS,
-    PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.VIEW_REPORTS, // Added: Admin should be able to view reports
     PERMISSIONS.CREATE_REPORTS,
     PERMISSIONS.EXPORT_REPORTS
   ],
@@ -318,14 +318,35 @@ export const AuthProvider = ({ children }) => {
       return true;
     }
     
+    // Handle legacy camelCase permissions (canViewInvoices, etc.)
+    const legacyPermissionMap = {
+      'canCreateInvoices': PERMISSIONS.CREATE_INVOICE,
+      'canViewInvoices': PERMISSIONS.VIEW_INVOICES,
+      'canViewCustomers': PERMISSIONS.VIEW_CUSTOMERS,
+      'canViewRooms': PERMISSIONS.VIEW_ROOMS,
+      'canEditInvoices': PERMISSIONS.EDIT_INVOICES,
+      'canEditRooms': PERMISSIONS.EDIT_ROOMS,
+      'canEditCustomers': PERMISSIONS.EDIT_CUSTOMERS,
+      'canDeleteInvoices': PERMISSIONS.DELETE_INVOICES,
+      'canDeleteRooms': PERMISSIONS.DELETE_ROOMS,
+      'canDeleteCustomers': PERMISSIONS.DELETE_CUSTOMERS,
+      'canViewReports': PERMISSIONS.VIEW_REPORTS,
+      'canCreateReports': PERMISSIONS.CREATE_REPORTS,
+      'canManageUsers': PERMISSIONS.MANAGE_ROLES,
+      'canCreateUsers': PERMISSIONS.CREATE_USERS
+    };
+    
+    // Convert legacy permission to actual permission if needed
+    const actualPermission = legacyPermissionMap[permission] || permission;
+    
     // Check if user has custom permissions array (stored in Firebase)
     if (user.permissions && Array.isArray(user.permissions)) {
-      return user.permissions.includes(permission);
+      return user.permissions.includes(actualPermission);
     }
     
     // Fall back to role-based permissions
     const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
-    return rolePermissions.includes(permission);
+    return rolePermissions.includes(actualPermission);
   };
 
   const hasAnyPermission = (permissions) => {

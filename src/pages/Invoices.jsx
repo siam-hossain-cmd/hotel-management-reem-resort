@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Eye, Edit, Trash2, Download, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
+import { invoiceService } from '../firebase/invoiceService';
 
 const Invoices = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -11,48 +12,41 @@ const Invoices = () => {
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const { canPerformAction, user } = useAuth();
 
-  // Initialize invoices with state management
-  const [invoices, setInvoices] = useState([
-    { 
-      id: 'INV-001', 
-      customer: 'John Doe', 
-      amount: 1250, 
-      status: 'Paid', 
-      date: '2024-01-15', 
-      dueDate: '2024-01-30', 
-      checkInDate: '2024-01-10', 
-      checkOutDate: '2024-01-12', 
-      adminName: 'Admin User',
-      roomNumber: '101',
-      roomType: 'Deluxe Room'
-    },
-    { 
-      id: 'INV-002', 
-      customer: 'Jane Smith', 
-      amount: 850, 
-      status: 'Pending', 
-      date: '2024-01-14', 
-      dueDate: '2024-01-29', 
-      checkInDate: '2024-01-15', 
-      checkOutDate: '2024-01-16', 
-      adminName: 'Admin User',
-      roomNumber: '205',
-      roomType: 'Standard Room'
-    },
-    { 
-      id: 'INV-003', 
-      customer: 'Bob Wilson', 
-      amount: 2100, 
-      status: 'Paid', 
-      date: '2024-01-13', 
-      dueDate: '2024-01-28', 
-      checkInDate: '2024-01-18', 
-      checkOutDate: '2024-01-20', 
-      adminName: 'Manager',
-      roomNumber: '301',
-      roomType: 'Suite'
+  // Initialize invoices with state management - load from database
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load invoices when component mounts
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const result = await invoiceService.getAllInvoices();
+      if (result.success) {
+        // Transform database data to match component expectations
+        const transformedInvoices = result.invoices.map(invoice => ({
+          id: invoice.id,
+          customer: invoice.customerInfo?.name || 'Unknown Customer',
+          amount: `৳${invoice.total?.toFixed(2) || '0.00'}`,
+          status: invoice.status || 'created',
+          date: invoice.invoiceDate || new Date().toISOString().split('T')[0],
+          dueDate: invoice.dueDate || '',
+          adminName: invoice.adminName || 'Unknown Admin',
+          fullData: invoice // Keep full invoice data for operations
+        }));
+        setInvoices(transformedInvoices);
+      } else {
+        console.error('Failed to load invoices:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = invoice.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -89,56 +83,48 @@ const Invoices = () => {
   };
 
   const handleView = (invoice) => {
-    // Create a mock invoice object for preview
-    const mockInvoice = {
-      id: invoice.id,
-      customerInfo: {
-        name: invoice.customer,
-        email: 'customer@example.com',
-        phone: '+1-555-0123',
-        address: '123 Main St, City, State 12345'
-      },
-      invoiceDate: invoice.date,
-      dueDate: invoice.dueDate,
-      items: [
-        { id: 1, description: 'Service/Product', quantity: 1, rate: invoice.amount, amount: invoice.amount }
-      ],
-      notes: '',
-      terms: 'Payment is due within 30 days',
-      subtotal: invoice.amount,
-      tax: invoice.amount * 0.1,
-      taxRate: 10,
-      total: invoice.amount * 1.1
-    };
-    previewInvoice(mockInvoice);
+    // Use the real invoice data from database
+    const realInvoice = invoice.fullData;
+    if (realInvoice) {
+      previewInvoice(realInvoice);
+    } else {
+      alert('Invoice data not available for preview.');
+      console.error('No fullData available for invoice:', invoice);
+    }
   };
 
   const handleDownload = async (invoice) => {
-    // Create a mock invoice object for PDF generation
-    const mockInvoice = {
-      id: invoice.id,
-      customerInfo: {
-        name: invoice.customer,
-        email: 'customer@example.com',
-        phone: '+1-555-0123',
-        address: '123 Main St, City, State 12345'
-      },
-      invoiceDate: invoice.date,
-      dueDate: invoice.dueDate,
-      items: [
-        { id: 1, description: 'Service/Product', quantity: 1, rate: invoice.amount, amount: invoice.amount }
-      ],
-      notes: '',
-      terms: 'Payment is due within 30 days',
-      subtotal: invoice.amount,
-      tax: invoice.amount * 0.1,
-      taxRate: 10,
-      total: invoice.amount * 1.1
-    };
-    
-    const success = await generateInvoicePDF(mockInvoice);
-    if (!success) {
+    try {
+      // Use the real invoice data from database
+      const realInvoice = invoice.fullData;
+      if (realInvoice) {
+        const success = await generateInvoicePDF(realInvoice);
+        if (success) {
+          console.log('PDF downloaded successfully');
+        } else {
+          alert('Failed to generate PDF. Please try again.');
+        }
+      } else {
+        alert('Invoice data not available for download.');
+        console.error('No fullData available for invoice:', invoice);
+      }
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
       alert('Failed to generate PDF. Please try again.');
+    }
+  };
+
+  const handleEdit = (invoice) => {
+    // For now, we'll show a message that edit functionality is coming soon
+    // In the future, we could navigate to CreateInvoice page with pre-filled data
+    const realInvoice = invoice.fullData;
+    if (realInvoice) {
+      // TODO: Implement edit functionality by navigating to CreateInvoice with data
+      alert('Edit functionality is coming soon. You can create a new invoice based on this one for now.');
+      console.log('Invoice to edit:', realInvoice);
+    } else {
+      alert('Invoice data not available for editing.');
+      console.error('No fullData available for invoice:', invoice);
     }
   };
 
@@ -154,9 +140,16 @@ const Invoices = () => {
         )}
       </div>
 
-      <div className="filters">
-        <div className="search-box">
-          <Search size={20} />
+      {loading ? (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading invoices...</p>
+        </div>
+      ) : (
+        <>
+          <div className="filters">
+            <div className="search-box">
+              <Search size={20} />
           <input
             type="text"
             placeholder="Search invoices..."
@@ -214,7 +207,11 @@ const Invoices = () => {
                 <Eye size={16} />
               </button>
               {canPerformAction('edit_invoice') && (
-                <button className="action-btn" title="Edit">
+                <button 
+                  className="action-btn" 
+                  title="Edit"
+                  onClick={() => handleEdit(invoice)}
+                >
                   <Edit size={16} />
                 </button>
               )}
@@ -243,6 +240,8 @@ const Invoices = () => {
         <div className="empty-state">
           <p>No invoices found matching your criteria.</p>
         </div>
+      )}
+      </>
       )}
 
       {/* Delete Confirmation Modal */}

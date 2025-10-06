@@ -68,34 +68,34 @@ const Dashboard = () => {
     const adminStats = [
       {
         title: 'Total Invoices',
-        value: '156', // This would come from your database
+        value: '0', // Will be loaded from database
         icon: FileText,
         color: 'blue',
-        change: '+12%',
+        change: 'No data yet',
         show: hasPermission('canViewInvoices')
       },
       {
         title: 'Total Customers',
-        value: '89',
+        value: '0',
         icon: Users,
         color: 'green',
-        change: '+5%',
+        change: 'No data yet',
         show: hasPermission('canViewCustomers')
       },
       {
         title: 'Total Revenue',
-        value: '$24,580',
+        value: '$0',
         icon: DollarSign,
         color: 'purple',
-        change: '+18%',
+        change: 'No data yet',
         show: hasPermission('canViewReports')
       },
       {
         title: 'System Health',
-        value: '98%',
+        value: '100%',
         icon: TrendingUp,
         color: 'orange',
-        change: '+2%',
+        change: 'System ready',
         show: isAdmin()
       }
     ];
@@ -104,56 +104,21 @@ const Dashboard = () => {
   };
 
   const loadRecentInvoices = async () => {
-    // Mock data - replace with actual database call
-    return [
-      { id: 'INV-001', customer: 'John Doe', amount: '$1,250', status: 'Paid', date: '2024-01-15' },
-      { id: 'INV-002', customer: 'Jane Smith', amount: '$850', status: 'Pending', date: '2024-01-14' },
-      { id: 'INV-003', customer: 'Bob Wilson', amount: '$2,100', status: 'Paid', date: '2024-01-13' },
-      { id: 'INV-004', customer: 'Alice Brown', amount: '$750', status: 'Overdue', date: '2024-01-10' },
-    ];
+    // Load real invoice data from database
+    // For now, return empty array until real data is implemented
+    return [];
   };
 
   const loadRecentActivity = async () => {
-    // Mock data - replace with actual database call
-    return [
-      {
-        id: 1,
-        action: 'Invoice Created',
-        description: 'Created invoice INV-001 for John Doe',
-        timestamp: '2024-01-15 10:30 AM',
-        user: 'Admin User',
-        riskLevel: 'low'
-      },
-      {
-        id: 2,
-        action: 'User Login',
-        description: 'User logged in successfully',
-        timestamp: '2024-01-15 09:15 AM',
-        user: user?.name || 'Current User',
-        riskLevel: 'low'
-      },
-      {
-        id: 3,
-        action: 'Customer Updated',
-        description: 'Updated customer information for Jane Smith',
-        timestamp: '2024-01-14 3:45 PM',
-        user: 'Admin User',
-        riskLevel: 'medium'
-      }
-    ];
+    // Load real activity data from database
+    // For now, return empty array until real activity tracking is implemented
+    return [];
   };
 
   const loadSecurityAlerts = async () => {
-    // Mock data - replace with actual database call
-    return [
-      {
-        id: 1,
-        type: 'warning',
-        message: 'Multiple login attempts detected',
-        timestamp: '2024-01-15 11:00 AM',
-        severity: 'medium'
-      }
-    ];
+    // Load real security alerts from database
+    // For now, return empty array until real security monitoring is implemented
+    return [];
   };
 
   if (loading) {

@@ -115,7 +115,7 @@ const AppContent = () => {
           <Route 
             path="/create-invoice" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute permission="canCreateInvoices">
                 <CreateInvoice />
               </ProtectedRoute>
             } 
@@ -139,7 +139,7 @@ const AppContent = () => {
           <Route 
             path="/rooms" 
             element={
-              <ProtectedRoute minAdminLevel="Admin">
+              <ProtectedRoute permission="canViewRooms">
                 <Rooms />
               </ProtectedRoute>
             } 
@@ -163,7 +163,7 @@ const AppContent = () => {
           <Route 
             path="/history" 
             element={
-              <ProtectedRoute permission="canViewHistory">
+              <ProtectedRoute permission="canViewReports">
                 <div style={{ padding: '2rem' }}>
                   <h1>Activity History</h1>
                   <p>Activity history and audit logs will be displayed here.</p>
@@ -174,7 +174,7 @@ const AppContent = () => {
           <Route 
             path="/reports" 
             element={
-              <ProtectedRoute role="MasterAdmin">
+              <ProtectedRoute permission="canViewReports">
                 <Reports />
               </ProtectedRoute>
             } 

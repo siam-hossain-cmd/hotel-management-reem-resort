@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Crown, Edit3, Eye, Users } from 'lucide-react';
+import { Shield, Crown, Settings, Eye, Users } from 'lucide-react';
 
 const PermissionsVisualization = ({ ROLES, PERMISSIONS, ROLE_PERMISSIONS }) => {
   const getRoleIcon = (role) => {
@@ -8,12 +8,10 @@ const PermissionsVisualization = ({ ROLES, PERMISSIONS, ROLE_PERMISSIONS }) => {
         return <Crown size={20} />;
       case ROLES.FULL_ADMIN:
         return <Shield size={20} />;
-      case ROLES.EDIT_ADMIN:
-        return <Edit3 size={20} />;
-      case ROLES.VIEW_ADMIN:
-        return <Eye size={20} />;
+      case ROLES.ADMIN: // Updated from EDIT_ADMIN
+        return <Settings size={20} />;
       case ROLES.FRONT_DESK:
-        return <Users size={20} />;
+        return <Eye size={20} />;
       default:
         return <Users size={20} />;
     }
@@ -67,12 +65,10 @@ const PermissionsVisualization = ({ ROLES, PERMISSIONS, ROLE_PERMISSIONS }) => {
         return 'Master Admin';
       case ROLES.FULL_ADMIN:
         return 'Full Admin';
-      case ROLES.EDIT_ADMIN:
-        return 'Edit Admin';
-      case ROLES.VIEW_ADMIN:
-        return 'View Admin';
+      case ROLES.ADMIN: // Updated from EDIT_ADMIN
+        return 'Admin';
       case ROLES.FRONT_DESK:
-        return 'Front Desk';
+        return 'Front Desk Staff';
       default:
         return role;
     }
