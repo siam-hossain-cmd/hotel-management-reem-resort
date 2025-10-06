@@ -60,14 +60,6 @@ const Header = () => {
   return (
     <header className="header">
       <div className="header-content">
-        <div className="header-left">
-          <h1>Reem Resort Invoice System</h1>
-          <div className="system-status">
-            <div className="status-indicator online"></div>
-            <span>System Online</span>
-          </div>
-        </div>
-        
         <div className="header-right">
           {/* Notifications */}
           <div className="notifications" onClick={() => setShowDropdown(!showDropdown)}>
@@ -115,23 +107,6 @@ const Header = () => {
 
           {/* User Menu */}
           <div className="user-menu">
-            <div className="user-info">
-              <div className="user-avatar">
-                {getRoleIcon()}
-              </div>
-              <div className="user-details">
-                <span className="user-name">
-                  {user?.name || user?.email?.split('@')[0] || 'User'}
-                </span>
-                <span className={`user-role ${getRoleColor()}`}>
-                  {getRoleDisplayName()}
-                </span>
-                {user?.department && (
-                  <span className="user-department">{user.department}</span>
-                )}
-              </div>
-            </div>
-            
             <button 
               className="logout-btn"
               onClick={handleLogout}
@@ -143,12 +118,6 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Security Banner for Demo/Dev Environment */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="dev-banner">
-          <span>🔧 Development Mode - Enhanced Security Active</span>
-        </div>
-      )}
     </header>
   );
 };

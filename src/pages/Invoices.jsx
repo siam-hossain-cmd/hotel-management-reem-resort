@@ -60,14 +60,30 @@ const Invoices = () => {
     setShowDeleteModal(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (invoiceToDelete) {
-      setInvoices(prevInvoices => 
-        prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
-      );
-      console.log('✅ Invoice deleted:', invoiceToDelete.id);
-      setShowDeleteModal(false);
-      setInvoiceToDelete(null);
+      try {
+        // Delete from Firebase database
+        const result = await invoiceService.deleteInvoice(invoiceToDelete.id);
+        
+        if (result.success) {
+          // Update local state only if database deletion was successful
+          setInvoices(prevInvoices => 
+            prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
+          );
+          console.log('✅ Invoice deleted from database:', invoiceToDelete.id);
+          alert('Invoice deleted successfully!');
+        } else {
+          console.error('Failed to delete invoice:', result.error);
+          alert('Failed to delete invoice: ' + result.error);
+        }
+      } catch (error) {
+        console.error('Error deleting invoice:', error);
+        alert('Error deleting invoice: ' + error.message);
+      } finally {
+        setShowDeleteModal(false);
+        setInvoiceToDelete(null);
+      }
     }
   };
 
@@ -115,13 +131,17 @@ const Invoices = () => {
   };
 
   const handleEdit = (invoice) => {
-    // For now, we'll show a message that edit functionality is coming soon
-    // In the future, we could navigate to CreateInvoice page with pre-filled data
     const realInvoice = invoice.fullData;
     if (realInvoice) {
-      // TODO: Implement edit functionality by navigating to CreateInvoice with data
-      alert('Edit functionality is coming soon. You can create a new invoice based on this one for now.');
-      console.log('Invoice to edit:', realInvoice);
+      // Store invoice data in localStorage for editing
+      localStorage.setItem('invoiceToEdit', JSON.stringify({
+        id: invoice.id,
+        ...realInvoice
+      }));
+      
+      // Navigate to CreateInvoice page
+      window.location.href = '/create-invoice?mode=edit&id=' + invoice.id;
+      console.log('Navigating to edit invoice:', invoice.id);
     } else {
       alert('Invoice data not available for editing.');
       console.error('No fullData available for invoice:', invoice);

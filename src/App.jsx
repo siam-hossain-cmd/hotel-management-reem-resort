@@ -11,6 +11,8 @@ import CreateInvoice from './pages/CreateInvoice';
 import Invoices from './pages/Invoices';
 import Customers from './pages/Customers';
 import Rooms from './pages/Rooms';
+import CreateBooking from './pages/CreateBooking';
+import Bookings from './pages/Bookings';
 import AdminManagement from './pages/AdminManagement';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
@@ -141,6 +143,22 @@ const AppContent = () => {
             element={
               <ProtectedRoute permission="canViewRooms">
                 <Rooms />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/create-booking" 
+            element={
+              <ProtectedRoute permission="canCreateBookings">
+                <CreateBooking />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/bookings" 
+            element={
+              <ProtectedRoute permission="canViewBookings">
+                <Bookings />
               </ProtectedRoute>
             } 
           />

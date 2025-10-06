@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Home, 
@@ -9,7 +9,13 @@ import {
   BarChart3,
   UserCog,
   Shield,
-  Bed
+  Bed,
+  Calendar,
+  CalendarPlus,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -17,17 +23,85 @@ const Sidebar = () => {
   const location = useLocation();
   const { canPerformAction, isMasterAdmin, user, ROLES } = useAuth();
   
+  // State for managing open/closed submenus
+  const [openMenus, setOpenMenus] = useState({
+    bookings: false,
+    invoices: false
+  });
+
+  // Auto-expand submenu if user is on a submenu page
+  useEffect(() => {
+    const bookingPaths = ['/bookings', '/create-booking'];
+    const invoicePaths = ['/invoices', '/create-invoice'];
+    
+    if (bookingPaths.includes(location.pathname)) {
+      setOpenMenus(prev => ({ ...prev, bookings: true }));
+    }
+    if (invoicePaths.includes(location.pathname)) {
+      setOpenMenus(prev => ({ ...prev, invoices: true }));
+    }
+  }, [location.pathname]);
+
+  // Toggle submenu open/closed
+  const toggleMenu = (menuKey) => {
+    setOpenMenus(prev => ({
+      ...prev,
+      [menuKey]: !prev[menuKey]
+    }));
+  };
+  
   const menuItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard', show: true },
-    { path: '/invoices', icon: FileText, label: 'Invoices', show: canPerformAction('view_invoices') || isMasterAdmin() },
+    
+    // Bookings Menu with Submenu
+    {
+      key: 'bookings',
+      icon: Calendar, 
+      label: 'Bookings', 
+      show: canPerformAction('view_bookings') || canPerformAction('manage_bookings') || isMasterAdmin(),
+      isSubmenu: true,
+      submenuItems: [
+        { 
+          path: '/bookings', 
+          icon: Eye, 
+          label: 'View Bookings', 
+          show: canPerformAction('view_bookings') || canPerformAction('manage_bookings') || isMasterAdmin() 
+        },
+        { 
+          path: '/create-booking', 
+          icon: Plus, 
+          label: 'New Booking', 
+          show: canPerformAction('create_booking') || canPerformAction('manage_bookings') || isMasterAdmin() 
+        }
+      ]
+    },
+    
+    // Invoices Menu with Submenu
+    {
+      key: 'invoices',
+      icon: FileText, 
+      label: 'Invoices', 
+      show: canPerformAction('view_invoices') || canPerformAction('create_invoice') || isMasterAdmin(),
+      isSubmenu: true,
+      submenuItems: [
+        { 
+          path: '/invoices', 
+          icon: Eye, 
+          label: 'View Invoices', 
+          show: canPerformAction('view_invoices') || isMasterAdmin() 
+        },
+        { 
+          path: '/create-invoice', 
+          icon: Plus, 
+          label: 'Create Invoice', 
+          show: canPerformAction('create_invoice') 
+        }
+      ]
+    },
+    
+    // Regular menu items
     { path: '/customers', icon: Users, label: 'Customers', show: canPerformAction('view_customers') || isMasterAdmin() },
     { path: '/rooms', icon: Bed, label: 'Rooms', show: canPerformAction('view_rooms') || isMasterAdmin() },
-    { 
-      path: '/create-invoice', 
-      icon: PlusCircle, 
-      label: 'Create Invoice', 
-      show: canPerformAction('create_invoice') 
-    },
     { 
       path: '/admin', 
       icon: UserCog, 
@@ -46,27 +120,73 @@ const Sidebar = () => {
     { path: '/settings', icon: Settings, label: 'Settings', show: true },
   ];
 
+  // Check if current path belongs to a submenu
+  const isSubmenuActive = (submenuItems) => {
+    return submenuItems.some(item => location.pathname === item.path);
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h2>Invoice Generator</h2>
+        <h2>Reem Resort System</h2>
       </div>
       <nav className="sidebar-nav">
         {menuItems.filter(item => item.show).map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path;
-          
-          return (
-            <Link 
-              key={item.path} 
-              to={item.path} 
-              className={`nav-item ${isActive ? 'active' : ''}`}
-            >
-              <Icon size={20} />
-              <span>{item.label}</span>
-              {item.badge && item.badge}
-            </Link>
-          );
+          if (item.isSubmenu) {
+            const isOpen = openMenus[item.key];
+            const isActive = isSubmenuActive(item.submenuItems);
+            const Icon = item.icon;
+            const ChevronIcon = isOpen ? ChevronDown : ChevronRight;
+            
+            return (
+              <div key={item.key} className="menu-group">
+                <div 
+                  className={`nav-item submenu-header ${isActive ? 'active' : ''}`}
+                  onClick={() => toggleMenu(item.key)}
+                >
+                  <Icon size={20} />
+                  <span>{item.label}</span>
+                  <ChevronIcon size={16} className="chevron-icon" />
+                </div>
+                
+                {isOpen && (
+                  <div className="submenu">
+                    {item.submenuItems.filter(subItem => subItem.show).map((subItem) => {
+                      const SubIcon = subItem.icon;
+                      const isSubActive = location.pathname === subItem.path;
+                      
+                      return (
+                        <Link 
+                          key={subItem.path} 
+                          to={subItem.path} 
+                          className={`nav-item submenu-item ${isSubActive ? 'active' : ''}`}
+                        >
+                          <SubIcon size={18} />
+                          <span>{subItem.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          } else {
+            // Regular menu item
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            
+            return (
+              <Link 
+                key={item.path} 
+                to={item.path} 
+                className={`nav-item ${isActive ? 'active' : ''}`}
+              >
+                <Icon size={20} />
+                <span>{item.label}</span>
+                {item.badge && item.badge}
+              </Link>
+            );
+          }
         })}
       </nav>
     </div>

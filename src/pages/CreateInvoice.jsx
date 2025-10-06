@@ -74,10 +74,120 @@ const CreateInvoice = () => {
   });
 
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingInvoiceId, setEditingInvoiceId] = useState(null);
+  
+  // Check for edit mode or booking mode on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+    const invoiceId = urlParams.get('id');
+    const bookingId = urlParams.get('bookingId');
+    
+    if (mode === 'edit' && invoiceId) {
+      setIsEditMode(true);
+      setEditingInvoiceId(invoiceId);
+      
+      // Load invoice data from localStorage
+      const invoiceToEdit = localStorage.getItem('invoiceToEdit');
+      if (invoiceToEdit) {
+        try {
+          const invoiceData = JSON.parse(invoiceToEdit);
+          setInvoice(invoiceData);
+          console.log('✅ Loaded invoice for editing:', invoiceData);
+          
+          // Clear from localStorage after loading
+          localStorage.removeItem('invoiceToEdit');
+        } catch (error) {
+          console.error('Error loading invoice for editing:', error);
+          alert('Error loading invoice data for editing');
+        }
+      }
+    } else if (mode === 'booking') {
+      // Load booking data for invoice creation
+      const bookingData = localStorage.getItem('bookingDataForInvoice') || localStorage.getItem('bookingForInvoice') || localStorage.getItem('completedBookingId');
+      if (bookingData) {
+        try {
+          let booking;
+          if (bookingData.startsWith('{')) {
+            // JSON data
+            booking = JSON.parse(bookingData);
+          } else {
+            // Just booking ID, would need to fetch from service
+            console.log('Need to fetch booking data for ID:', bookingData);
+            // For now, we'll handle this case later
+            return;
+          }
+          
+          console.log('📋 Converting booking data to invoice:', booking);
+          
+          // Convert booking to invoice format
+          const invoiceFromBooking = {
+            id: `INV-${Date.now()}`,
+            customerInfo: {
+              name: `${booking.guestInfo?.firstName || ''} ${booking.guestInfo?.lastName || ''}`.trim(),
+              email: booking.guestInfo?.email || '',
+              address: booking.guestInfo?.address || '',
+              phone: booking.guestInfo?.phone || '',
+              nid: booking.guestInfo?.idNumber || ''
+            },
+            invoiceDate: new Date().toISOString().split('T')[0],
+            dueDate: '',
+            adminName: booking.createdBy || booking.adminName || getAdminName(),
+            items: [{
+              id: uuidv4(),
+              roomNumber: booking.roomNumber || '',
+              roomType: booking.roomType || '',
+              checkInDate: booking.checkInDate || '',
+              checkOutDate: booking.checkOutDate || '',
+              totalNights: booking.totalNights || 0,
+              perNightCost: booking.pricePerNight || 0,
+              discountPercentage: 0,
+              discountAmount: 0,
+              guestCount: booking.guestCount || 1,
+              amount: booking.subtotal || booking.total || 0
+            }],
+            additionalCharges: [],
+            payments: booking.paymentInfo ? [{
+              id: uuidv4(),
+              method: booking.paymentInfo.method || 'cash',
+              amount: booking.paymentInfo.amount || 0,
+              date: new Date().toISOString().split('T')[0],
+              reference: booking.paymentInfo.reference || '',
+              notes: booking.paymentInfo.notes || ''
+            }] : [],
+            notes: booking.guestInfo?.specialRequests || '',
+            terms: 'Payment is due within 30 days',
+            originalSubtotal: booking.subtotal || 0,
+            totalDiscount: 0,
+            subtotal: booking.subtotal || 0,
+            additionalTotal: 0,
+            tax: booking.taxes || 0,
+            taxRate: 10,
+            total: booking.total || 0,
+            totalPaid: booking.paymentInfo?.amount || 0,
+            dueAmount: (booking.total || 0) - (booking.paymentInfo?.amount || 0),
+            bookingRef: `BK-${Date.now().toString().substring(6)}`
+          };
+          
+          setInvoice(invoiceFromBooking);
+          console.log('✅ Auto-populated invoice from booking data:', invoiceFromBooking);
+          
+          // Clear booking data from localStorage after using it
+          localStorage.removeItem('bookingDataForInvoice');
+          localStorage.removeItem('bookingForInvoice');
+          
+        } catch (error) {
+          console.error('Error loading booking data for invoice:', error);
+          alert('Error loading booking data for invoice creation');
+        }
+      }
+    }
+  }, []);
   
   // Set admin name automatically when component mounts or user changes
   useEffect(() => {
-    if (user) {
+    if (user && !isEditMode) {
       setInvoice(prev => ({
         ...prev,
         adminName: getAdminName()
@@ -376,17 +486,36 @@ const CreateInvoice = () => {
       
       console.log('Cleaned invoice data:', invoiceToSave);
       
-      const result = await invoiceService.createInvoice(invoiceToSave);
+      let result;
+      if (isEditMode && editingInvoiceId) {
+        // Update existing invoice
+        result = await invoiceService.updateInvoice(editingInvoiceId, invoiceToSave);
+        if (result.success) {
+          result.id = editingInvoiceId; // Set the ID for consistency
+        }
+      } else {
+        // Create new invoice
+        result = await invoiceService.createInvoice(invoiceToSave);
+      }
       
       if (result.success) {
-        alert('Invoice saved successfully!');
-        console.log('Invoice saved with ID:', result.id);
+        const action = isEditMode ? 'updated' : 'saved';
+        alert(`Invoice ${action} successfully!`);
+        console.log(`Invoice ${action} with ID:`, result.id);
         // Update the invoice ID with the database ID
         setInvoice(prev => ({ ...prev, dbId: result.id }));
+        
+        // If this was an edit, redirect back to invoices page
+        if (isEditMode) {
+          setTimeout(() => {
+            window.location.href = '/invoices';
+          }, 1000);
+        }
         return true;
       } else {
-        alert('Failed to save invoice: ' + result.error);
-        console.error('Save failed:', result.error);
+        const action = isEditMode ? 'update' : 'save';
+        alert(`Failed to ${action} invoice: ` + result.error);
+        console.error(`${action} failed:`, result.error);
         return false;
       }
     } catch (error) {
@@ -440,7 +569,7 @@ const CreateInvoice = () => {
   return (
     <div className="create-invoice">
       <div className="page-header">
-        <h1>Create New Invoice</h1>
+        <h1>{isEditMode ? 'Edit Invoice' : 'Create New Invoice'}</h1>
       </div>
 
       <div className="invoice-form">
@@ -901,7 +1030,7 @@ const CreateInvoice = () => {
             </button>
             <button className="btn btn-success" onClick={handleSaveAndPrint}>
               <Printer size={20} />
-              Create Invoice & Print
+              {isEditMode ? 'Update Invoice & Print' : 'Create Invoice & Print'}
             </button>
             <button className="btn btn-primary" onClick={handleSend}>
               <Send size={20} />

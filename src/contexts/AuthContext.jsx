@@ -45,6 +45,19 @@ export const PERMISSIONS = {
   UPLOAD_ROOMS: 'upload_rooms',
   MANAGE_ROOM_INVENTORY: 'manage_room_inventory',
   
+  // Booking permissions
+  VIEW_BOOKINGS: 'view_bookings',
+  CREATE_BOOKING: 'create_booking',
+  EDIT_BOOKINGS: 'edit_bookings',
+  DELETE_BOOKING: 'delete_booking',
+  MANAGE_BOOKINGS: 'manage_bookings',
+  CONFIRM_BOOKINGS: 'confirm_bookings',
+  CANCEL_BOOKINGS: 'cancel_bookings',
+  CHECKIN_GUESTS: 'checkin_guests',
+  CHECKOUT_GUESTS: 'checkout_guests',
+  MANAGE_PAYMENTS: 'manage_payments',
+  GENERATE_INVOICE: 'generate_invoice',
+  
   // User management permissions
   VIEW_USERS: 'view_users',
   CREATE_USERS: 'create_users',
@@ -97,6 +110,17 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.DELETE_ROOMS,
     PERMISSIONS.UPLOAD_ROOMS,
     PERMISSIONS.MANAGE_ROOM_INVENTORY,
+    PERMISSIONS.VIEW_BOOKINGS,
+    PERMISSIONS.CREATE_BOOKING,
+    PERMISSIONS.EDIT_BOOKINGS,
+    PERMISSIONS.DELETE_BOOKING,
+    PERMISSIONS.MANAGE_BOOKINGS,
+    PERMISSIONS.CONFIRM_BOOKINGS,
+    PERMISSIONS.CANCEL_BOOKINGS,
+    PERMISSIONS.CHECKIN_GUESTS,
+    PERMISSIONS.CHECKOUT_GUESTS,
+    PERMISSIONS.MANAGE_PAYMENTS,
+    PERMISSIONS.GENERATE_INVOICE,
     PERMISSIONS.VIEW_USERS,
     PERMISSIONS.CREATE_USERS,
     PERMISSIONS.EDIT_USERS,
@@ -161,6 +185,16 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_ROOMS,
     PERMISSIONS.CREATE_ROOMS,
     PERMISSIONS.EDIT_ROOMS,
+    PERMISSIONS.VIEW_BOOKINGS,
+    PERMISSIONS.CREATE_BOOKING,
+    PERMISSIONS.EDIT_BOOKINGS,
+    PERMISSIONS.MANAGE_BOOKINGS,
+    PERMISSIONS.CONFIRM_BOOKINGS,
+    PERMISSIONS.CANCEL_BOOKINGS,
+    PERMISSIONS.CHECKIN_GUESTS,
+    PERMISSIONS.CHECKOUT_GUESTS,
+    PERMISSIONS.MANAGE_PAYMENTS,
+    PERMISSIONS.GENERATE_INVOICE,
     PERMISSIONS.VIEW_REPORTS, // Added: Admin should be able to view reports
     PERMISSIONS.CREATE_REPORTS,
     PERMISSIONS.EXPORT_REPORTS
@@ -168,11 +202,16 @@ export const ROLE_PERMISSIONS = {
   
 
   [ROLES.FRONT_DESK]: [
-    // Front desk staff - view only access (no create invoice, no edit rooms, no delete)
+    // Front desk staff - view access plus booking management
     PERMISSIONS.VIEW_DASHBOARD,
     PERMISSIONS.VIEW_INVOICES,
     PERMISSIONS.VIEW_CUSTOMERS,
     PERMISSIONS.VIEW_ROOMS,
+    PERMISSIONS.VIEW_BOOKINGS,
+    PERMISSIONS.CREATE_BOOKING,
+    PERMISSIONS.CONFIRM_BOOKINGS,
+    PERMISSIONS.CHECKIN_GUESTS,
+    PERMISSIONS.CHECKOUT_GUESTS,
     PERMISSIONS.VIEW_REPORTS
   ]
 };
@@ -396,6 +435,19 @@ export const AuthProvider = ({ children }) => {
       'delete_rooms': PERMISSIONS.DELETE_ROOMS,
       'delete_customers': PERMISSIONS.DELETE_CUSTOMERS,
       
+      // Booking actions
+      'view_bookings': PERMISSIONS.VIEW_BOOKINGS,
+      'create_booking': PERMISSIONS.CREATE_BOOKING,
+      'edit_bookings': PERMISSIONS.EDIT_BOOKINGS,
+      'delete_booking': PERMISSIONS.DELETE_BOOKING,
+      'manage_bookings': PERMISSIONS.MANAGE_BOOKINGS,
+      'confirm_bookings': PERMISSIONS.CONFIRM_BOOKINGS,
+      'cancel_bookings': PERMISSIONS.CANCEL_BOOKINGS,
+      'checkin_guests': PERMISSIONS.CHECKIN_GUESTS,
+      'checkout_guests': PERMISSIONS.CHECKOUT_GUESTS,
+      'manage_payments': PERMISSIONS.MANAGE_PAYMENTS,
+      'generate_invoice': PERMISSIONS.GENERATE_INVOICE,
+      
       // Management actions
       'manage_users': PERMISSIONS.MANAGE_ROLES,
       'create_admin': PERMISSIONS.CREATE_USERS,
@@ -418,22 +470,35 @@ export const AuthProvider = ({ children }) => {
       case 'view_invoices':
       case 'view_customers':
       case 'view_rooms':
+      case 'view_bookings':
         return true; // All authenticated users can view basic data
       
       case 'create_invoice':
       case 'create_customers':
-        return hasPermission(PERMISSIONS.CREATE_INVOICE) || hasPermission(PERMISSIONS.CREATE_CUSTOMERS);
+      case 'create_booking':
+        return hasPermission(PERMISSIONS.CREATE_INVOICE) || hasPermission(PERMISSIONS.CREATE_CUSTOMERS) || hasPermission(PERMISSIONS.CREATE_BOOKING);
       
       case 'edit_invoice':
       case 'edit_rooms':
       case 'edit_customers':
+      case 'edit_bookings':
         return canEdit();
       
       case 'delete_invoice':
       case 'delete_rooms':
       case 'delete_customers':
+      case 'delete_booking':
       case 'upload_rooms':
         return canDelete();
+      
+      case 'manage_bookings':
+      case 'confirm_bookings':
+      case 'cancel_bookings':
+      case 'checkin_guests':
+      case 'checkout_guests':
+      case 'manage_payments':
+      case 'generate_invoice':
+        return hasPermission(PERMISSIONS.MANAGE_BOOKINGS) || hasPermission(PERMISSIONS.CONFIRM_BOOKINGS) || canEdit();
       
       case 'manage_users':
       case 'create_admin':
