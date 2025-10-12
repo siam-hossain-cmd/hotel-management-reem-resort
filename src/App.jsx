@@ -11,7 +11,7 @@ import CreateInvoice from './pages/CreateInvoice';
 import Invoices from './pages/Invoices';
 import Customers from './pages/Customers';
 import Rooms from './pages/Rooms';
-import CreateBooking from './pages/CreateBooking';
+import CreateBooking from './pages/CreateBookingNew';
 import Bookings from './pages/Bookings';
 import AdminManagement from './pages/AdminManagement';
 import UserManagement from './pages/UserManagement';

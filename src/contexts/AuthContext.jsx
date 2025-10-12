@@ -606,6 +606,7 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     logout,
+    getIdToken: authService.getIdToken,
     hasRole,
     isMasterAdmin,
     isFullAdmin,

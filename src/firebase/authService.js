@@ -321,6 +321,19 @@ class AuthService {
     return this.currentUser;
   }
 
+  // Get Firebase ID token for the currently signed-in user (client-side)
+  async getIdToken(forceRefresh = false) {
+    try {
+      if (auth && auth.currentUser && typeof auth.currentUser.getIdToken === 'function') {
+        return await auth.currentUser.getIdToken(forceRefresh);
+      }
+      return null;
+    } catch (err) {
+      console.error('Error getting ID token:', err);
+      return null;
+    }
+  }
+
   // Check if user is authenticated
   isAuthenticated() {
     return !!this.currentUser;

@@ -19,9 +19,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { roomService } from '../firebase/roomService';
-import { bookingService } from '../firebase/bookingService';
-import { invoiceService } from '../firebase/invoiceService';
+import { api } from '../services/api';
 
 const Dashboard = () => {
   const { user, hasPermission, isAdmin, logout } = useAuth();
@@ -115,24 +113,17 @@ const Dashboard = () => {
 
   const loadRoomStatistics = async () => {
     try {
-      // Get all rooms
-      const roomsResult = await roomService.getAllRooms();
+      // Get all rooms from MySQL
+      const roomsResult = await api.getRooms();
       const rooms = roomsResult.success ? roomsResult.rooms : [];
       
       // Get current bookings to determine room availability
-      const today = new Date().toISOString().split('T')[0];
-      const bookingsResult = await bookingService.getBookingsByDate(today, today);
-      const todayBookings = bookingsResult.success ? bookingsResult.bookings : [];
-      
+      // For now, we'll use room status from the database
       const totalRooms = rooms.length;
-      const bookedRoomNumbers = todayBookings
-        .filter(booking => booking.status === 'confirmed' || booking.status === 'checked-in')
-        .map(booking => booking.roomNumber);
-      
-      const bookedRooms = bookedRoomNumbers.length;
-      const availableRooms = totalRooms - bookedRooms;
-      const occupancyPercentage = totalRooms > 0 ? Math.round((bookedRooms / totalRooms) * 100) : 0;
+      const bookedRooms = rooms.filter(room => room.status === 'occupied').length;
+      const availableRooms = rooms.filter(room => room.status === 'available').length;
       const maintenanceRooms = rooms.filter(room => room.status === 'maintenance').length;
+      const occupancyPercentage = totalRooms > 0 ? Math.round((bookedRooms / totalRooms) * 100) : 0;
 
       return {
         totalRooms,
@@ -155,31 +146,13 @@ const Dashboard = () => {
 
   const loadRoomDetails = async () => {
     try {
-      // Get all rooms
-      const roomsResult = await roomService.getAllRooms();
+      // Get all rooms from MySQL
+      const roomsResult = await api.getRooms();
       const allRooms = roomsResult.success ? roomsResult.rooms : [];
       
-      // Get current bookings to determine room availability
-      const today = new Date().toISOString().split('T')[0];
-      const bookingsResult = await bookingService.getBookingsByDate(today, today);
-      const todayBookings = bookingsResult.success ? bookingsResult.bookings : [];
-      
-      // Create a map of booked rooms with booking details
-      const bookedRoomsMap = new Map();
-      todayBookings
-        .filter(booking => booking.status === 'confirmed' || booking.status === 'checked-in')
-        .forEach(booking => {
-          bookedRoomsMap.set(booking.roomNumber, {
-            ...booking,
-            roomInfo: allRooms.find(room => room.roomNumber === booking.roomNumber)
-          });
-        });
-      
-      // Categorize rooms
-      const bookedRooms = Array.from(bookedRoomsMap.values());
-      const availableRooms = allRooms.filter(room => 
-        !bookedRoomsMap.has(room.roomNumber) && room.status !== 'maintenance'
-      );
+      // Categorize rooms based on their status
+      const bookedRooms = allRooms.filter(room => room.status === 'occupied');
+      const availableRooms = allRooms.filter(room => room.status === 'available');
       const maintenanceRooms = allRooms.filter(room => room.status === 'maintenance');
 
       return {
@@ -200,175 +173,43 @@ const Dashboard = () => {
   };
 
   const loadMonthlyBookings = async () => {
-    try {
-      // Get all bookings
-      const bookingsResult = await bookingService.getAllBookings();
-      const allBookings = bookingsResult.success ? bookingsResult.bookings : [];
-      
-      // Get current month's date range
-      const now = new Date();
-      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      
-      // Create calendar data
-      const calendarData = [];
-      const daysInMonth = lastDay.getDate();
-      
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(now.getFullYear(), now.getMonth(), day);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        const dayBookings = allBookings.filter(booking => {
-          const checkIn = new Date(booking.checkInDate);
-          const checkOut = new Date(booking.checkOutDate);
-          const currentDate = new Date(dateStr);
-          
-          return currentDate >= checkIn && currentDate < checkOut;
-        });
-        
-        calendarData.push({
-          date: dateStr,
-          day: day,
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          bookings: dayBookings,
-          occupancy: dayBookings.length,
-          isToday: dateStr === new Date().toISOString().split('T')[0]
-        });
-      }
-      
-      return calendarData;
-    } catch (error) {
-      console.error('Error loading monthly bookings:', error);
-      return [];
-    }
+    // Simplified for now - will be enhanced when booking system is integrated
+    return [];
   };
 
   const loadNext30DaysData = async () => {
-    try {
-      // Get all bookings and rooms
-      const [bookingsResult, roomsResult] = await Promise.all([
-        bookingService.getAllBookings(),
-        roomService.getAllRooms()
-      ]);
-      
-      const allBookings = bookingsResult.success ? bookingsResult.bookings : [];
-      const allRooms = roomsResult.success ? roomsResult.rooms : [];
-      
-      // Create next 30 days data
-      const next30Days = [];
-      const today = new Date();
-      
-      for (let i = 0; i < 30; i++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-        
-        // Get bookings for this date
-        const dayBookings = allBookings.filter(booking => {
-          const checkIn = new Date(booking.checkInDate);
-          const checkOut = new Date(booking.checkOutDate);
-          const currentDate = new Date(dateStr);
-          
-          return currentDate >= checkIn && currentDate < checkOut && 
-                 (booking.status === 'confirmed' || booking.status === 'checked-in');
-        });
-        
-        // Calculate room type availability
-        const roomTypeAvailability = {};
-        const roomTypes = [...new Set(allRooms.map(room => room.roomType))];
-        
-        roomTypes.forEach(roomType => {
-          const totalRoomsOfType = allRooms.filter(room => 
-            room.roomType === roomType && room.status !== 'maintenance'
-          ).length;
-          
-          const bookedRoomsOfType = dayBookings.filter(booking => {
-            const room = allRooms.find(r => r.roomNumber === booking.roomNumber);
-            return room && room.roomType === roomType;
-          }).length;
-          
-          roomTypeAvailability[roomType] = {
-            total: totalRoomsOfType,
-            booked: bookedRoomsOfType,
-            available: totalRoomsOfType - bookedRoomsOfType
-          };
-        });
-        
-        const totalRooms = allRooms.filter(room => room.status !== 'maintenance').length;
-        const bookedRooms = dayBookings.length;
-        const availableRooms = totalRooms - bookedRooms;
-        const occupancyPercentage = totalRooms > 0 ? Math.round((bookedRooms / totalRooms) * 100) : 0;
-        
-        next30Days.push({
-          date: dateStr,
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          dayNumber: date.getDate(),
-          month: date.toLocaleDateString('en-US', { month: 'short' }),
-          totalRooms,
-          bookedRooms,
-          availableRooms,
-          occupancyPercentage,
-          roomTypeAvailability,
-          isToday: i === 0
-        });
-      }
-      
-      return next30Days;
-    } catch (error) {
-      console.error('Error loading next 30 days data:', error);
-      return [];
-    }
+    // Simplified for now - will be enhanced when booking system is integrated
+    return [];
   };
 
-
-
-
-
-
-
   const loadRecentBookings = async () => {
-    try {
-      const result = await bookingService.getRecentBookings(5);
-      return result.success ? result.bookings : [];
-    } catch (error) {
-      console.error('Error loading recent bookings:', error);
-      return [];
-    }
+    // Simplified for now - will be enhanced when booking system is integrated
+    return [];
   };
 
   const loadRecentInvoices = async () => {
-    try {
-      const result = await invoiceService.getRecentInvoices(5);
-      return result.success ? result.invoices : [];
-    } catch (error) {
-      console.error('Error loading recent invoices:', error);
-      return [];
-    }
+    // Simplified for now - will be enhanced when booking system is integrated
+    return [];
   };
 
   const loadRoomTypeOccupancy = async () => {
     try {
-      const roomsResult = await roomService.getAllRooms();
+      const roomsResult = await api.getRooms();
       const rooms = roomsResult.success ? roomsResult.rooms : [];
-      
-      const today = new Date().toISOString().split('T')[0];
-      const bookingsResult = await bookingService.getBookingsByDate(today, today);
-      const todayBookings = bookingsResult.success ? bookingsResult.bookings : [];
       
       // Group rooms by type
       const roomsByType = rooms.reduce((acc, room) => {
-        acc[room.roomType] = (acc[room.roomType] || 0) + 1;
+        const roomType = room.room_type || room.roomType;
+        acc[roomType] = (acc[roomType] || 0) + 1;
         return acc;
       }, {});
       
       // Count booked rooms by type
-      const bookedByType = todayBookings
-        .filter(booking => booking.status === 'confirmed' || booking.status === 'checked-in')
-        .reduce((acc, booking) => {
-          const room = rooms.find(r => r.roomNumber === booking.roomNumber);
-          if (room) {
-            acc[room.roomType] = (acc[room.roomType] || 0) + 1;
-          }
+      const bookedByType = rooms
+        .filter(room => room.status === 'occupied')
+        .reduce((acc, room) => {
+          const roomType = room.room_type || room.roomType;
+          acc[roomType] = (acc[roomType] || 0) + 1;
           return acc;
         }, {});
       
@@ -585,8 +426,8 @@ const Dashboard = () => {
           <div className="room-numbers-grid">
             {dashboardData.roomDetails.availableRooms.map((room, index) => (
               <div key={index} className="room-number-card available">
-                <div className="room-number">{room.roomNumber}</div>
-                <div className="room-type">{room.roomType}</div>
+                <div className="room-number">{room.room_number}</div>
+                <div className="room-type">{room.room_type}</div>
                 <div className="room-status-indicator available">Available</div>
               </div>
             ))}
@@ -603,16 +444,16 @@ const Dashboard = () => {
             Booked Rooms ({dashboardData.roomDetails.bookedRooms.length})
           </h3>
           <div className="room-numbers-grid">
-            {dashboardData.roomDetails.bookedRooms.map((booking, index) => (
+            {dashboardData.roomDetails.bookedRooms.map((room, index) => (
               <div key={index} className="room-number-card booked">
-                <div className="room-number">{booking.roomNumber}</div>
-                <div className="room-type">{booking.roomInfo?.roomType || 'Standard'}</div>
-                <div className="guest-name">{booking.guestName}</div>
+                <div className="room-number">{room.room_number}</div>
+                <div className="room-type">{room.room_type}</div>
+                <div className="guest-name">Guest Details</div>
                 <div className="booking-dates">
-                  {new Date(booking.checkInDate).toLocaleDateString()} - {new Date(booking.checkOutDate).toLocaleDateString()}
+                  Currently Occupied
                 </div>
-                <div className={`room-status-indicator ${booking.status}`}>
-                  {booking.status === 'confirmed' ? 'Confirmed' : 'Checked In'}
+                <div className="room-status-indicator occupied">
+                  Occupied
                 </div>
               </div>
             ))}
@@ -632,8 +473,8 @@ const Dashboard = () => {
             <div className="room-numbers-grid">
               {dashboardData.roomDetails.maintenanceRooms.map((room, index) => (
                 <div key={index} className="room-number-card maintenance">
-                  <div className="room-number">{room.roomNumber}</div>
-                  <div className="room-type">{room.roomType}</div>
+                  <div className="room-number">{room.room_number}</div>
+                  <div className="room-type">{room.room_type}</div>
                   <div className="room-status-indicator maintenance">Under Maintenance</div>
                 </div>
               ))}
@@ -642,66 +483,16 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* Next 30 Days Booking Overview Table */}
+      {/* Next 30 Days Booking Overview - Coming Soon */}
       <div className="dashboard-section">
         <h2 className="section-title">
           <Calendar size={20} />
-          Next 30 Days Booking Overview
+          Booking Overview (Coming Soon)
         </h2>
-        <div className="booking-overview-table-container">
-          <table className="booking-overview-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Day</th>
-                <th>Occupancy %</th>
-                <th>Available Rooms</th>
-                <th>Room Type Availability</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dashboardData.next30DaysData.map((dayData, index) => (
-                <tr key={index} className={dayData.isToday ? 'today-row' : ''}>
-                  <td className="date-cell">
-                    <div className="date-display">
-                      <span className="day-number">{dayData.dayNumber}</span>
-                      <span className="month-name">{dayData.month}</span>
-                    </div>
-                  </td>
-                  <td className="day-cell">{dayData.dayName}</td>
-                  <td className="occupancy-cell">
-                    <div className="occupancy-display">
-                      <span className={`occupancy-percentage ${dayData.occupancyPercentage >= 80 ? 'high' : dayData.occupancyPercentage >= 50 ? 'medium' : 'low'}`}>
-                        {dayData.occupancyPercentage}%
-                      </span>
-                      <div className="occupancy-bar-mini">
-                        <div 
-                          className="occupancy-fill-mini" 
-                          style={{ width: `${dayData.occupancyPercentage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="available-rooms-cell">
-                    <span className="available-count">{dayData.availableRooms}</span>
-                    <span className="total-count">/ {dayData.totalRooms}</span>
-                  </td>
-                  <td className="room-types-cell">
-                    <div className="room-types-grid">
-                      {Object.entries(dayData.roomTypeAvailability).map(([roomType, data]) => (
-                        <div key={roomType} className="room-type-item">
-                          <span className="room-type-name">{roomType}</span>
-                          <span className={`room-type-count ${data.available === 0 ? 'fully-booked' : data.available <= 2 ? 'low-availability' : 'good-availability'}`}>
-                            {data.available}/{data.total}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="coming-soon-card">
+          <Calendar size={48} />
+          <h3>Booking Integration in Progress</h3>
+          <p>Full booking calendar and occupancy forecasting will be available once the booking system is integrated.</p>
         </div>
       </div>
 

@@ -3,7 +3,7 @@ import { Plus, Search, Filter, Eye, Edit, Trash2, Download, AlertTriangle } from
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
-import { invoiceService } from '../firebase/invoiceService';
+import { api } from '../services/api';
 
 const Invoices = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,17 +24,22 @@ const Invoices = () => {
   const loadInvoices = async () => {
     try {
       setLoading(true);
-      const result = await invoiceService.getAllInvoices();
+      const result = await api.getInvoices();
       if (result.success) {
         // Transform database data to match component expectations
         const transformedInvoices = result.invoices.map(invoice => ({
           id: invoice.id,
-          customer: invoice.customerInfo?.name || 'Unknown Customer',
-          amount: `৳${invoice.total?.toFixed(2) || '0.00'}`,
-          status: invoice.status || 'created',
-          date: invoice.invoiceDate || new Date().toISOString().split('T')[0],
-          dueDate: invoice.dueDate || '',
-          adminName: invoice.adminName || 'Unknown Admin',
+          customer: `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 'Unknown Customer',
+          amount: parseFloat(invoice.total || 0),
+          status: invoice.status || 'issued',
+          date: invoice.issued_at ? new Date(invoice.issued_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          dueDate: invoice.due_at ? new Date(invoice.due_at).toISOString().split('T')[0] : '',
+          checkInDate: invoice.checkin_date ? new Date(invoice.checkin_date).toISOString().split('T')[0] : '',
+          checkOutDate: invoice.checkout_date ? new Date(invoice.checkout_date).toISOString().split('T')[0] : '',
+          adminName: 'Admin', // Default since we don't have admin tracking yet
+          booking_id: invoice.booking_id,
+          customer_id: invoice.customer_id,
+          room_id: invoice.room_id,
           fullData: invoice // Keep full invoice data for operations
         }));
         setInvoices(transformedInvoices);
@@ -63,20 +68,13 @@ const Invoices = () => {
   const handleConfirmDelete = async () => {
     if (invoiceToDelete) {
       try {
-        // Delete from Firebase database
-        const result = await invoiceService.deleteInvoice(invoiceToDelete.id);
-        
-        if (result.success) {
-          // Update local state only if database deletion was successful
-          setInvoices(prevInvoices => 
-            prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
-          );
-          console.log('✅ Invoice deleted from database:', invoiceToDelete.id);
-          alert('Invoice deleted successfully!');
-        } else {
-          console.error('Failed to delete invoice:', result.error);
-          alert('Failed to delete invoice: ' + result.error);
-        }
+        // Note: Delete functionality not implemented in API yet
+        // For now, just remove from local state
+        setInvoices(prevInvoices => 
+          prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
+        );
+        console.log('✅ Invoice removed from list:', invoiceToDelete.id);
+        alert('Invoice removed from list (delete API not implemented yet)');
       } catch (error) {
         console.error('Error deleting invoice:', error);
         alert('Error deleting invoice: ' + error.message);
@@ -211,7 +209,7 @@ const Invoices = () => {
           <div key={invoice.id} className="table-row">
             <div className="invoice-id">{invoice.id}</div>
             <div>{invoice.customer}</div>
-            <div className="amount">৳{invoice.amount.toLocaleString()}</div>
+            <div className="amount">৳{invoice.amount.toFixed(2)}</div>
             <div>
               <span className={`status-badge ${invoice.status.toLowerCase()}`}>
                 {invoice.status}
@@ -277,7 +275,7 @@ const Invoices = () => {
               <div className="invoice-details">
                 <strong>Invoice ID:</strong> {invoiceToDelete?.id}<br />
                 <strong>Customer:</strong> {invoiceToDelete?.customer}<br />
-                <strong>Amount:</strong> ৳{invoiceToDelete?.amount.toLocaleString()}
+                <strong>Amount:</strong> ৳{invoiceToDelete?.amount?.toFixed(2) || '0.00'}
               </div>
               <p className="warning-text">
                 <strong>Warning:</strong> This action cannot be undone.

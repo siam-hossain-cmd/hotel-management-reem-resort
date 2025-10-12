@@ -21,8 +21,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { roomService } from '../firebase/roomService';
-import roomsData from '../data/rooms.json';
+import { api } from '../services/api';
+import AddRoomForm from '../components/AddRoomForm';
 
 const Rooms = () => {
   const [rooms, setRooms] = useState([]);
@@ -33,6 +33,7 @@ const Rooms = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showAddRoomForm, setShowAddRoomForm] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
   
   const { canPerformAction } = useAuth();
@@ -49,21 +50,37 @@ const Rooms = () => {
   const loadRoomsData = async () => {
     try {
       setLoading(true);
-      const [roomsData, roomTypesData] = await Promise.all([
-        roomService.getAllRooms(),
-        roomService.getAllRoomTypes()
-      ]);
-      setRooms(roomsData);
-      setRoomTypes(roomTypesData);
+      // Use new MySQL API instead of Firebase
+      const roomsResponse = await api.getRooms();
+      if (roomsResponse.success) {
+        setRooms(roomsResponse.rooms);
+        
+        // Extract unique room types from rooms data
+        const uniqueTypes = [...new Set(roomsResponse.rooms.map(room => room.room_type))];
+        const roomTypesData = uniqueTypes.map((type, index) => ({
+          id: index + 1,
+          name: type
+        }));
+        setRoomTypes(roomTypesData);
+      } else {
+        setError('Failed to load rooms from database');
+        setRooms([]);
+        setRoomTypes([]);
+      }
     } catch (error) {
       console.error('Error loading rooms:', error);
-      setError('Failed to load rooms data');
-      // Fallback to local data if Firebase fails
-      setRooms(roomsData.rooms || []);
-      setRoomTypes(roomsData.roomTypes || []);
+      setError('Failed to connect to database');
+      setRooms([]);
+      setRoomTypes([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRoomAdded = async () => {
+    // Reload rooms data when a new room is added
+    await loadRoomsData();
+    setShowAddRoomForm(false);
   };
 
   const handleUploadToFirebase = async () => {
@@ -145,10 +162,14 @@ const Rooms = () => {
   };
 
   const filteredRooms = rooms.filter(room => {
-    const matchesSearch = room.roomNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         room.type.toLowerCase().includes(searchTerm.toLowerCase());
+    // Adapt to MySQL database structure
+    const roomNumber = room.room_number || room.roomNumber;
+    const roomType = room.room_type || room.type;
+    
+    const matchesSearch = roomNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         roomType.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || room.status === filterStatus;
-    const matchesType = filterType === 'all' || room.type === filterType;
+    const matchesType = filterType === 'all' || roomType === filterType;
     
     return matchesSearch && matchesStatus && matchesType;
   });
@@ -179,7 +200,10 @@ const Rooms = () => {
             </button>
           )}
           {canPerformAction('edit_rooms') && (
-            <button className="btn btn-primary">
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowAddRoomForm(true)}
+            >
               <Plus size={20} />
               Add Room
             </button>
@@ -235,7 +259,7 @@ const Rooms = () => {
             <div className="room-header">
               <div className="room-number">
                 <Bed size={20} />
-                <span>Room {room.roomNumber}</span>
+                <span>Room {room.room_number || room.roomNumber}</span>
               </div>
               <div className="room-status">
                 {getStatusIcon(room.status)}
@@ -244,8 +268,8 @@ const Rooms = () => {
             </div>
             
             <div className="room-details">
-              <h3>{room.type}</h3>
-              <p className="room-description">{room.description}</p>
+              <h3>{room.room_type || room.type}</h3>
+              <p className="room-description">{room.description || 'Hotel room'}</p>
               
               <div className="room-info">
                 <div className="info-item">
@@ -254,11 +278,11 @@ const Rooms = () => {
                 </div>
                 <div className="info-item">
                   <DollarSign size={16} />
-                  <span>৳{room.pricePerNight}/night</span>
+                  <span>৳{room.rate || room.pricePerNight}/night</span>
                 </div>
                 <div className="info-item">
                   <MapPin size={16} />
-                  <span>Floor {room.floor}</span>
+                  <span>Floor {room.floor || JSON.parse(room.meta || '{}').floor || 'N/A'}</span>
                 </div>
               </div>
               
@@ -267,7 +291,7 @@ const Rooms = () => {
                   <span key={index} className="amenity-tag">
                     {amenity}
                   </span>
-                ))}
+                )) || <span className="amenity-tag">Standard amenities</span>}
                 {room.amenities?.length > 4 && (
                   <span className="amenity-tag">+{room.amenities.length - 4} more</span>
                 )}
@@ -303,7 +327,8 @@ const Rooms = () => {
       {filteredRooms.length === 0 && (
         <div className="empty-state">
           <Bed size={48} />
-          <p>No rooms found matching your criteria</p>
+          <p>No rooms found. Add rooms to get started!</p>
+          <p className="text-sm text-gray-600">Database is empty and ready for admin to add rooms.</p>
         </div>
       )}
 
@@ -363,10 +388,16 @@ const Rooms = () => {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        )}
+
+      {/* Add Room Form Modal */}
+      {showAddRoomForm && (
+        <AddRoomForm
+          onRoomAdded={handleRoomAdded}
+          onCancel={() => setShowAddRoomForm(false)}
+        />
       )}
     </div>
   );
-};
-
-export default Rooms;
+};export default Rooms;

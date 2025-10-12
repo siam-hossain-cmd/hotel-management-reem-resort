@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Eye, Edit, Trash2, Calendar, Users, CheckCircle, XCircle, Clock, CreditCard, AlertTriangle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { bookingService } from '../firebase/bookingService';
+import { api } from '../services/api';
 import '../booking.css';
 
 const Bookings = () => {
@@ -22,31 +22,33 @@ const Bookings = () => {
   const loadBookings = async () => {
     setLoading(true);
     try {
-      const result = await bookingService.getAllBookings();
+      const result = await api.getBookings();
       if (result.success) {
         const transformedBookings = result.bookings.map(booking => ({
           id: booking.id,
-          bookingRef: `BK-${booking.id.substring(0, 8).toUpperCase()}`,
-          guestName: `${booking.guestInfo?.firstName || ''} ${booking.guestInfo?.lastName || ''}`.trim(),
-          guestEmail: booking.guestInfo?.email || '',
-          guestPhone: booking.guestInfo?.phone || '',
-          roomNumber: booking.roomNumber,
-          roomType: booking.roomType,
-          checkInDate: booking.checkInDate,
-          checkOutDate: booking.checkOutDate,
-          totalNights: booking.totalNights,
-          guestCount: booking.guestCount || 1,
-          total: booking.total,
-          paymentStatus: booking.paymentStatus || 'unpaid',
-          status: booking.status || 'pending',
-          createdAt: booking.createdAt,
-          createdBy: booking.createdBy,
+          bookingRef: booking.booking_reference,
+          guestName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+          guestEmail: booking.email || '',
+          guestPhone: booking.phone || '',
+          roomNumber: booking.room_number,
+          roomType: booking.room_type,
+          checkInDate: booking.checkin_date,
+          checkOutDate: booking.checkout_date,
+          totalNights: Math.ceil((new Date(booking.checkout_date) - new Date(booking.checkin_date)) / (1000 * 60 * 60 * 24)),
+          guestCount: booking.capacity || 1,
+          total: parseFloat(booking.total_amount),
+          paymentStatus: booking.payment_status || 'pending',
+          status: booking.status || 'confirmed',
+          createdAt: booking.created_at,
+          createdBy: booking.created_by || 'System',
+          currency: booking.currency || 'BDT',
           fullData: booking // Store full booking data for actions
         }));
         
         setBookings(transformedBookings);
       } else {
         console.error('Failed to load bookings:', result.error);
+        setBookings([]);
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
@@ -168,7 +170,7 @@ Check-in: ${booking.checkInDate}
 Check-out: ${booking.checkOutDate}
 Nights: ${booking.totalNights}
 Guests: ${booking.guestCount}
-Total: $${booking.total?.toFixed(2)}
+Total: ৳${booking.total?.toFixed(2)}
 Status: ${booking.status}
 Payment Status: ${booking.paymentStatus}
 Created by: ${booking.createdBy}
@@ -330,7 +332,7 @@ Created by: ${booking.createdBy}
                 <td>{booking.checkOutDate}</td>
                 <td className="text-center">{booking.totalNights}</td>
                 <td className="text-center">{booking.guestCount}</td>
-                <td className="amount">${booking.total?.toFixed(2)}</td>
+                <td className="amount">৳{booking.total?.toFixed(2)}</td>
                 <td>
                   <div className="status-controls">
                     {getStatusBadge(booking.status)}
