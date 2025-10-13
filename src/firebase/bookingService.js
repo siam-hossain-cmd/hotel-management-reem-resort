@@ -199,84 +199,55 @@ export const bookingService = {
   // Delete booking
   deleteBooking: async (id) => {
     try {
-      // Prefer REST API deletion which operates on MySQL backend
-      const res = await api.deleteBooking(id);
-      console.log('API deleteBooking response:', res);
-      return res;
+      // Use API to delete from MySQL backend
+      const result = await api.deleteBooking(id);
+      console.log('API deleteBooking result:', result);
+      return result;
     } catch (error) {
-      console.error('Error deleting booking via API, falling back to Firestore delete:', error);
+      console.error('Error deleting booking via API, falling back to Firestore:', error);
       try {
         await deleteDoc(doc(db, 'bookings', id));
-        console.log('Booking deleted in Firestore fallback:', id);
+        console.log('Booking deleted via Firestore fallback:', id);
         return { success: true };
-      } catch (err) {
-        console.error('Error deleting booking in Firestore fallback:', err);
-        return { success: false, error: err.message };
+      } catch (fallbackError) {
+        console.error('Error deleting booking via Firestore fallback:', fallbackError);
+        return { success: false, error: fallbackError.message };
       }
     }
   },
 
   // Confirm booking
   confirmBooking: async (id) => {
-    // Use API to update booking status on backend
-    try {
-      const res = await api.updateBookingStatus(id, { status: 'confirmed' });
-      if (res.success) return { success: true };
-      return { success: false, error: res.error };
-    } catch (error) {
-      console.warn('API status update failed, falling back to Firestore update:', error);
-      return await bookingService.updateBooking(id, { 
-        status: 'confirmed',
-        confirmedAt: serverTimestamp()
-      });
-    }
+    return await bookingService.updateBooking(id, { 
+      status: 'confirmed',
+      confirmedAt: serverTimestamp()
+    });
   },
 
   // Mark as paid
   markAsPaid: async (id, paymentDetails = {}) => {
-    try {
-      const res = await api.updateBookingStatus(id, { status: 'paid', paymentStatus: 'paid', paymentDetails });
-      if (res.success) return { success: true };
-      return { success: false, error: res.error };
-    } catch (error) {
-      console.warn('API markAsPaid failed, falling back to Firestore update:', error);
-      return await bookingService.updateBooking(id, { 
-        status: 'paid',
-        paymentStatus: 'paid',
-        paidAt: serverTimestamp(),
-        paymentDetails
-      });
-    }
+    return await bookingService.updateBooking(id, { 
+      status: 'paid',
+      paymentStatus: 'paid',
+      paidAt: serverTimestamp(),
+      paymentDetails
+    });
   },
 
   // Check in guest
   checkIn: async (id) => {
-    try {
-      const res = await api.updateBookingStatus(id, { status: 'checked_in' });
-      if (res.success) return { success: true };
-      return { success: false, error: res.error };
-    } catch (error) {
-      console.warn('API checkIn failed, falling back to Firestore update:', error);
-      return await bookingService.updateBooking(id, { 
-        status: 'checked-in',
-        checkedInAt: serverTimestamp()
-      });
-    }
+    return await bookingService.updateBooking(id, { 
+      status: 'checked-in',
+      checkedInAt: serverTimestamp()
+    });
   },
 
   // Check out guest
   checkOut: async (id) => {
-    try {
-      const res = await api.updateBookingStatus(id, { status: 'checked_out' });
-      if (res.success) return { success: true };
-      return { success: false, error: res.error };
-    } catch (error) {
-      console.warn('API checkOut failed, falling back to Firestore update:', error);
-      return await bookingService.updateBooking(id, { 
-        status: 'checked-out',
-        checkedOutAt: serverTimestamp()
-      });
-    }
+    return await bookingService.updateBooking(id, { 
+      status: 'checked-out',
+      checkedOutAt: serverTimestamp()
+    });
   },
 
   // Get recent bookings
@@ -332,18 +303,11 @@ export const bookingService = {
 
   // Cancel booking
   cancelBooking: async (id, reason = '') => {
-    try {
-      const res = await api.updateBookingStatus(id, { status: 'cancelled', cancellationReason: reason });
-      if (res.success) return { success: true };
-      return { success: false, error: res.error };
-    } catch (error) {
-      console.warn('API cancelBooking failed, falling back to Firestore update:', error);
-      return await bookingService.updateBooking(id, { 
-        status: 'cancelled',
-        cancelledAt: serverTimestamp(),
-        cancellationReason: reason
-      });
-    }
+    return await bookingService.updateBooking(id, { 
+      status: 'cancelled',
+      cancelledAt: serverTimestamp(),
+      cancellationReason: reason
+    });
   }
 };
 

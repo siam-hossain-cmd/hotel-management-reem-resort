@@ -1,44 +1,3 @@
-// Delete a booking by ID
-router.delete('/:id', async (req, res) => {
-  const pool = getPool();
-  const conn = await pool.getConnection();
-  try {
-    const bookingId = req.params.id;
-    await conn.beginTransaction();
-
-    // Check if booking exists
-    const [bookingRows] = await conn.query('SELECT id, room_id FROM bookings WHERE id = ? FOR UPDATE', [bookingId]);
-    if (bookingRows.length === 0) {
-      await conn.rollback();
-      return res.status(404).json({ success: false, error: 'Booking not found' });
-    }
-    const roomId = bookingRows[0].room_id;
-
-    // Delete related invoices
-    await conn.query('DELETE FROM invoices WHERE booking_id = ?', [bookingId]);
-
-    // Delete the booking
-    await conn.query('DELETE FROM bookings WHERE id = ?', [bookingId]);
-
-    // Optionally, set room status to available if no other active bookings for this room
-    const [activeBookings] = await conn.query(
-      "SELECT id FROM bookings WHERE room_id = ? AND status IN ('confirmed','checked_in')",
-      [roomId]
-    );
-    if (activeBookings.length === 0) {
-      await conn.query('UPDATE rooms SET status = ? WHERE id = ?', ['available', roomId]);
-    }
-
-    await conn.commit();
-    res.json({ success: true, message: 'Booking deleted successfully' });
-  } catch (err) {
-    await conn.rollback();
-    console.error('Failed to delete booking:', err);
-    res.status(500).json({ success: false, error: err.message });
-  } finally {
-    conn.release();
-  }
-});
 import express from 'express';
 import { getPool } from '../db.js';
 
@@ -266,6 +225,48 @@ router.put('/:id/status', async (req, res) => {
   } catch (err) {
     await conn.rollback();
     console.error('Failed to update booking status:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// Delete a booking by ID
+router.delete('/:id', async (req, res) => {
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    const bookingId = req.params.id;
+    await conn.beginTransaction();
+
+    // Check if booking exists
+    const [bookingRows] = await conn.query('SELECT id, room_id FROM bookings WHERE id = ? FOR UPDATE', [bookingId]);
+    if (bookingRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+    const roomId = bookingRows[0].room_id;
+
+    // Delete related invoices
+    await conn.query('DELETE FROM invoices WHERE booking_id = ?', [bookingId]);
+
+    // Delete the booking
+    await conn.query('DELETE FROM bookings WHERE id = ?', [bookingId]);
+
+    // Optionally, set room status to available if no other active bookings for this room
+    const [activeBookings] = await conn.query(
+      "SELECT id FROM bookings WHERE room_id = ? AND status IN ('confirmed','checked_in')",
+      [roomId]
+    );
+    if (activeBookings.length === 0) {
+      await conn.query('UPDATE rooms SET status = ? WHERE id = ?', ['available', roomId]);
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'Booking deleted successfully' });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Failed to delete booking:', err);
     res.status(500).json({ success: false, error: err.message });
   } finally {
     conn.release();

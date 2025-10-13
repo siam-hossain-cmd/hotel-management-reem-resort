@@ -311,7 +311,7 @@ service cloud.firestore {
     // Booking documents - authenticated users can manage bookings
     match /bookings/{bookingId} {
       allow read, write, create: if isAdmin();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || resource.data.createdBy == request.auth.uid;
     }
     
     // =================================================================
