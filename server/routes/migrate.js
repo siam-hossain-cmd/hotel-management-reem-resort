@@ -1,5 +1,5 @@
-const express = require('express');
-const { getPool } = require('../db');
+import express from 'express';
+import { getPool } from '../db.js';
 
 // Add a migration endpoint to the server
 const router = express.Router();
@@ -33,4 +33,4 @@ router.post('/add-customer-fields', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

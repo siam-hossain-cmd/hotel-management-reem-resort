@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import { initDb, getPool } from '../db.js';
+
 const router = express.Router();
-const { initDb, getPool } = require('../db');
 
 // Get available rooms for specific date range - MUST be before /:id route
 router.get('/available', async (req, res) => {
@@ -145,4 +146,4 @@ router.put('/:id/status', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

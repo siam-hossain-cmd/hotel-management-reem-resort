@@ -1,9 +1,14 @@
-const mysql = require('mysql2/promise');
+import dotenv from 'dotenv';
+import mysql from 'mysql2/promise';
+
+// Load environment variables
+dotenv.config();
 
 let pool;
 
-async function initDb() {
+export async function initDb() {
   if (pool) return pool;
+  
   const config = {
     host: process.env.MYSQL_HOST || '127.0.0.1',
     port: process.env.MYSQL_PORT ? parseInt(process.env.MYSQL_PORT) : 3306,
@@ -15,16 +20,30 @@ async function initDb() {
     queueLimit: 0
   };
 
-  pool = mysql.createPool(config);
-  // Simple test
-  const conn = await pool.getConnection();
-  await conn.query('SELECT 1');
-  conn.release();
-  console.log('MySQL pool created');
-  return pool;
+  console.log('Connecting to MySQL database...');
+  console.log(`Host: ${config.host}:${config.port}`);
+  console.log(`Database: ${config.database}`);
+  console.log(`User: ${config.user}`);
+
+  try {
+    pool = mysql.createPool(config);
+    
+    // Test the connection
+    const conn = await pool.getConnection();
+    await conn.query('SELECT 1 as test');
+    conn.release();
+    
+    console.log('✅ MySQL pool created and tested successfully');
+    return pool;
+  } catch (error) {
+    console.error('❌ Failed to create MySQL pool:', error.message);
+    throw error;
+  }
 }
 
-module.exports = {
-  initDb,
-  getPool: () => pool
-};
+export function getPool() {
+  if (!pool) {
+    throw new Error('Database pool not initialized. Call initDb() first.');
+  }
+  return pool;
+}

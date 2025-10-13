@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Bed, Check, Search, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Calendar, Users, Bed, Check, Search, ArrowLeft, ArrowRight, Eye, Download } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import './CreateBooking.css';
+import { previewInvoice, generateInvoicePDF } from '../utils/pdfGenerator';
+
 
 const CreateBooking = () => {
   const { user } = useAuth();
@@ -41,9 +43,36 @@ const CreateBooking = () => {
     payment_status: 'pending',
     paid_amount: 0
   });
+  const [vatRate, setVatRate] = useState(10); // Add VAT rate state
+  const [payments, setPayments] = useState([]); // Multiple payments array
+  const [newPayment, setNewPayment] = useState({
+    method: 'cash',
+    amount: 0,
+    notes: ''
+  });
   
   const [errors, setErrors] = useState({});
   const [bookingResult, setBookingResult] = useState(null);
+
+  // Recalculate totals whenever relevant details change
+  useEffect(() => {
+    if (bookingDetails.selectedRoom) {
+      const { total, discount, final } = calculateTotal(bookingDetails.selectedRoom, bookingDetails.discount_percentage);
+      const subtotal = final;
+      const tax = subtotal * (vatRate / 100);
+      const finalAmountWithVAT = subtotal + tax;
+
+      setBookingDetails(prev => ({
+        ...prev,
+        total_amount: total,
+        discount_amount: discount,
+        final_amount: finalAmountWithVAT, // This is now the grand total
+        subtotal_before_vat: subtotal, // Store for display
+        vat_amount: tax // Store for display
+      }));
+    }
+  }, [bookingDetails.selectedRoom, bookingDetails.discount_percentage, vatRate, bookingDetails.checkin_date, bookingDetails.checkout_date]);
+
 
   useEffect(() => {
     // Only search for available rooms when we have both dates and we're on step 2
@@ -143,7 +172,11 @@ const CreateBooking = () => {
   };
 
   const handleNext = () => {
-    if (validateStep(currentStep)) {
+    const isStepValid = validateStep(currentStep);
+
+    // Allow moving to the invoice review step (4) even if guest info (step 3) is not fully valid,
+    // but still show the validation errors. The final confirmation will be blocked.
+    if (isStepValid || currentStep === 3) {
       if (currentStep === 1) {
         // Clear previous room selection when dates change
         setBookingDetails(prev => ({
@@ -153,6 +186,7 @@ const CreateBooking = () => {
           total_amount: 0
         }));
       }
+      
       setCurrentStep(currentStep + 1);
     }
   };
@@ -182,23 +216,147 @@ const CreateBooking = () => {
     setLoading(true);
     try {
       const finalAmount = bookingDetails.final_amount > 0 ? bookingDetails.final_amount : bookingDetails.total_amount;
+      const totalPaid = getTotalPaid();
       
-      const response = await api.createBooking({
-        ...guestInfo,
-        ...bookingDetails,
-        user_id: user?.uid || null,
-        total_amount: finalAmount,
-        payment_method: paymentData.payment_method,
-        payment_status: paymentData.payment_status,
-        paid_amount: paymentData.paid_amount
-      });
+      // Determine payment status based on payments
+      let paymentStatus = 'pending';
+      if (totalPaid >= finalAmount) {
+        paymentStatus = 'paid';
+      } else if (totalPaid > 0) {
+        paymentStatus = 'partial';
+      }
+      
+      // Validate required fields before sending
+      if (!guestInfo.first_name || !guestInfo.last_name || !guestInfo.email || !guestInfo.phone) {
+        alert('Please fill in all required guest information fields.');
+        return;
+      }
+      
+      if (!bookingDetails.room_id || !bookingDetails.checkin_date || !bookingDetails.checkout_date) {
+        alert('Please ensure room and date information is complete.');
+        return;
+      }
+      
+      // Try multiple data structure approaches
+      const bookingDataStructures = [
+        // Structure 1: With guestInfo object
+        {
+          guestInfo: {
+            first_name: guestInfo.first_name,
+            last_name: guestInfo.last_name,
+            email: guestInfo.email,
+            phone: guestInfo.phone,
+            address: guestInfo.address,
+            nid: guestInfo.nid
+          },
+          room_id: bookingDetails.room_id,
+          checkin_date: bookingDetails.checkin_date,
+          checkout_date: bookingDetails.checkout_date,
+          total_amount: finalAmount,
+          discount_percentage: bookingDetails.discount_percentage || 0,
+          discount_amount: bookingDetails.discount_amount || 0,
+          final_amount: finalAmount,
+          auto_checkin: bookingDetails.auto_checkin || false,
+          status: 'confirmed', // Set booking status as confirmed when created
+          payment_method: payments.length > 0 ? payments[0].method : 'cash',
+          payment_status: paymentStatus,
+          paid_amount: totalPaid,
+          user_id: user?.uid || null,
+          payments: payments,
+          payment_details: {
+            payments: payments,
+            total_paid: totalPaid,
+            due_amount: getDueAmount()
+          }
+        },
+        // Structure 2: Flat structure with individual guest fields
+        {
+          first_name: guestInfo.first_name,
+          last_name: guestInfo.last_name,
+          email: guestInfo.email,
+          phone: guestInfo.phone,
+          address: guestInfo.address,
+          nid: guestInfo.nid,
+          room_id: bookingDetails.room_id,
+          checkin_date: bookingDetails.checkin_date,
+          checkout_date: bookingDetails.checkout_date,
+          total_amount: finalAmount,
+          discount_percentage: bookingDetails.discount_percentage || 0,
+          discount_amount: bookingDetails.discount_amount || 0,
+          final_amount: finalAmount,
+          auto_checkin: bookingDetails.auto_checkin || false,
+          status: 'confirmed', // Set booking status as confirmed when created
+          payment_method: payments.length > 0 ? payments[0].method : 'cash',
+          payment_status: paymentStatus,
+          paid_amount: totalPaid,
+          user_id: user?.uid || null,
+          payments: payments,
+          payment_details: {
+            payments: payments,
+            total_paid: totalPaid,
+            due_amount: getDueAmount()
+          }
+        },
+        // Structure 3: Combined approach
+        {
+          ...guestInfo,
+          ...bookingDetails,
+          total_amount: finalAmount,
+          final_amount: finalAmount,
+          status: 'confirmed', // Set booking status as confirmed when created
+          payment_method: payments.length > 0 ? payments[0].method : 'cash',
+          payment_status: paymentStatus,
+          paid_amount: totalPaid,
+          user_id: user?.uid || null,
+          payments: payments,
+          payment_details: {
+            payments: payments,
+            total_paid: totalPaid,
+            due_amount: getDueAmount()
+          }
+        }
+      ];
+      
+      let response = null;
+      let lastError = null;
+      
+      // Try each structure until one works
+      for (let i = 0; i < bookingDataStructures.length; i++) {
+        const bookingData = bookingDataStructures[i];
+        console.log(`Trying booking data structure ${i + 1}:`, bookingData);
+        
+        try {
+          response = await api.createBooking(bookingData);
+          if (response.success) {
+            console.log(`Success with structure ${i + 1}`);
+            break;
+          } else {
+            console.log(`Failed with structure ${i + 1}:`, response.error);
+            lastError = response.error;
+          }
+        } catch (error) {
+          console.log(`Exception with structure ${i + 1}:`, error);
+          lastError = error.message;
+        }
+      }
 
-      if (response.success) {
+      if (response && response.success) {
         setBookingResult(response);
+        // Also fetch the full invoice data for the confirmation page
+        if (response.invoice_id) {
+          try {
+            const invoiceRes = await api.getInvoiceById(response.invoice_id);
+            if (invoiceRes.success) {
+              setInvoiceData(invoiceRes.invoice);
+            }
+          } catch (invoiceError) {
+            console.warn('Failed to fetch invoice data:', invoiceError);
+          }
+        }
         setCurrentStep(5);
       } else {
-        console.error('Booking creation failed:', response.error);
-        alert(`Failed to create booking: ${response.error}`);
+        console.error('All booking attempts failed. Last error:', lastError);
+        alert(`Failed to create booking: ${lastError || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error creating booking:', error);
@@ -207,6 +365,96 @@ const CreateBooking = () => {
       setLoading(false);
     }
   };
+
+  const handleViewInvoice = () => {
+    const mockInvoiceData = createMockInvoiceData();
+    if (mockInvoiceData) {
+      previewInvoice(mockInvoiceData);
+    } else {
+      alert("Invoice data is not available for preview.");
+    }
+  };
+
+  const handleDownloadInvoice = () => {
+    const mockInvoiceData = createMockInvoiceData();
+    if (mockInvoiceData) {
+      generateInvoicePDF(mockInvoiceData);
+    } else {
+      alert("Invoice data is not available for download.");
+    }
+  };
+
+  const createMockInvoiceData = () => {
+    if (!bookingDetails.selectedRoom || !guestInfo.first_name) {
+      return null;
+    }
+
+    return {
+      id: 'PREVIEW-' + Date.now(),
+      invoiceDate: new Date().toISOString(),
+      dueDate: bookingDetails.checkout_date,
+      customerInfo: {
+        name: `${guestInfo.first_name} ${guestInfo.last_name}`.trim(),
+        email: guestInfo.email || '',
+        phone: guestInfo.phone || '',
+        address: guestInfo.address || '',
+        nid: guestInfo.nid || ''
+      },
+      items: [
+        {
+          roomNumber: `Room ${bookingDetails.selectedRoom.room_number}`,
+          checkInDate: bookingDetails.checkin_date,
+          checkOutDate: bookingDetails.checkout_date,
+          totalNights: getNights(),
+          guestCount: bookingDetails.selectedRoom.capacity || 1,
+          perNightCost: parseFloat(bookingDetails.selectedRoom.rate),
+          amount: bookingDetails.total_amount - (bookingDetails.discount_amount || 0),
+          description: `Room ${bookingDetails.selectedRoom.room_number} - ${bookingDetails.selectedRoom.room_type}`,
+          quantity: getNights(),
+          unitPrice: parseFloat(bookingDetails.selectedRoom.rate)
+        }
+      ],
+      originalSubtotal: bookingDetails.total_amount || 0,
+      totalDiscount: bookingDetails.discount_amount || 0,
+      subtotal: (bookingDetails.total_amount || 0) - (bookingDetails.discount_amount || 0),
+      taxRate: vatRate,
+      taxAmount: bookingDetails.vat_amount || 0,
+      total: bookingDetails.final_amount || bookingDetails.total_amount,
+      paymentStatus: getTotalPaid() >= (bookingDetails.final_amount || bookingDetails.total_amount) ? 'paid' : 'pending',
+      notes: `Check-in: ${bookingDetails.checkin_date}, Check-out: ${bookingDetails.checkout_date}`,
+      additionalCharges: [],
+      additionalTotal: 0
+    };
+  };
+
+  const addPayment = () => {
+    if (newPayment.amount > 0) {
+      setPayments(prev => [...prev, {
+        ...newPayment,
+        id: Date.now() // Simple ID for key
+      }]);
+      setNewPayment({
+        method: 'cash',
+        amount: 0,
+        notes: ''
+      });
+    }
+  };
+
+  const removePayment = (paymentId) => {
+    setPayments(prev => prev.filter(p => p.id !== paymentId));
+  };
+
+  const getTotalPaid = () => {
+    return payments.reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
+  };
+
+  const getDueAmount = () => {
+    const finalAmount = bookingDetails.final_amount || 0;
+    const totalPaid = getTotalPaid();
+    return Math.max(0, finalAmount - totalPaid);
+  };
+
 
   const getNights = () => {
     if (!bookingDetails.checkin_date || !bookingDetails.checkout_date) return 0;
@@ -234,11 +482,11 @@ const CreateBooking = () => {
           </div>
           <div className={`step ${currentStep >= 4 ? 'active' : ''}`}>
             <span>4</span>
-            <label>Invoice</label>
+            <label>Review & Confirm</label>
           </div>
           <div className={`step ${currentStep >= 5 ? 'active' : ''}`}>
             <span>5</span>
-            <label>Payment</label>
+            <label>Confirmation</label>
           </div>
         </div>
       </div>
@@ -580,84 +828,302 @@ const CreateBooking = () => {
 
         {/* Step 4: Invoice */}
         {currentStep === 4 && (
-          <div className="booking-step">
-            <h2>Invoice Preview</h2>
+          <div className="booking-step invoice-step">
+            <h2>Create New Invoice</h2>
             
-            <div className="invoice-preview">
-              <div className="invoice-header">
-                <h3>REEM RESORT</h3>
-                <p>Invoice for Booking</p>
-              </div>
-              
-              <div className="invoice-details">
-                <div className="invoice-section">
-                  <h4>Guest Information</h4>
-                  <p><strong>Name:</strong> {guestInfo.first_name} {guestInfo.last_name}</p>
-                  <p><strong>Email:</strong> {guestInfo.email}</p>
-                  <p><strong>Phone:</strong> {guestInfo.phone}</p>
-                  <p><strong>Address:</strong> {guestInfo.address}</p>
-                  <p><strong>NID:</strong> {guestInfo.nid}</p>
-                </div>
+            {/* Only render invoice if we have the required data */}
+            {bookingDetails.selectedRoom ? (
+              <div className="invoice-form-container">
                 
-                <div className="invoice-section">
-                  <h4>Booking Details</h4>
-                  <p><strong>Room:</strong> {bookingDetails.selectedRoom?.room_number} - {bookingDetails.selectedRoom?.room_type}</p>
-                  <p><strong>Check-in:</strong> {new Date(bookingDetails.checkin_date).toLocaleDateString()}</p>
-                  <p><strong>Check-out:</strong> {new Date(bookingDetails.checkout_date).toLocaleDateString()}</p>
-                  <p><strong>Nights:</strong> {getNights()}</p>
-                </div>
-                
-                <div className="invoice-section">
-                  <h4>Payment Details</h4>
-                  <div className="invoice-amounts">
-                    <div className="amount-row">
-                      <span>Room Rate × {getNights()} nights:</span>
-                      <span>৳{bookingDetails.total_amount.toFixed(2)}</span>
+                {/* Invoice Details */}
+                <div className="form-section">
+                  <h3>Invoice Details</h3>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label>Invoice ID</label>
+                      <input type="text" value="AUTO-GENERATED" disabled className="form-control" />
                     </div>
-                    {bookingDetails.discount_percentage > 0 && (
-                      <div className="amount-row discount">
-                        <span>Discount ({bookingDetails.discount_percentage}%):</span>
-                        <span>-৳{bookingDetails.discount_amount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="amount-row total">
-                      <span><strong>Total Amount:</strong></span>
-                      <span><strong>৳{(bookingDetails.final_amount > 0 ? bookingDetails.final_amount : bookingDetails.total_amount).toFixed(2)}</strong></span>
+                    <div className="form-group">
+                      <label>Invoice Date</label>
+                      <input type="date" value={new Date().toISOString().split('T')[0]} disabled className="form-control" />
+                    </div>
+                    <div className="form-group">
+                      <label>Due Date</label>
+                      <input type="date" value={bookingDetails.checkout_date} disabled className="form-control" />
+                    </div>
+                    <div className="form-group">
+                      <label>Created By (Admin) - Auto Assigned</label>
+                      <input type="text" value={user?.email || 'System Admin'} disabled className="form-control" />
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="payment-section">
-              <h3>Payment Information</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label htmlFor="payment_method">Payment Method</label>
-                  <select
-                    id="payment_method"
-                    value={paymentData.payment_method}
-                    onChange={(e) => setPaymentData(prev => ({ ...prev, payment_method: e.target.value }))}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="card">Credit/Debit Card</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="mobile_banking">Mobile Banking</option>
-                  </select>
+                {/* Customer Information */}
+                <div className="form-section">
+                  <h3>Customer Information</h3>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label>Customer Name</label>
+                      <input 
+                        type="text" 
+                        value={`${guestInfo.first_name || ''} ${guestInfo.last_name || ''}`.trim() || '[Customer Name]'} 
+                        disabled 
+                        className="form-control" 
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Email</label>
+                      <input type="email" value={guestInfo.email || '[Email]'} disabled className="form-control" />
+                    </div>
+                    <div className="form-group">
+                      <label>NID Number</label>
+                      <input type="text" value={guestInfo.nid || '[NID]'} disabled className="form-control" />
+                    </div>
+                    <div className="form-group">
+                      <label>Phone</label>
+                      <input type="tel" value={guestInfo.phone || '[Phone]'} disabled className="form-control" />
+                    </div>
+                    <div className="form-group full-width">
+                      <label>Address</label>
+                      <textarea value={guestInfo.address || '[Address]'} disabled className="form-control" rows="2" />
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="form-group">
-                  <label htmlFor="paid_amount">Amount Received</label>
-                  <input
-                    type="number"
-                    id="paid_amount"
-                    value={paymentData.paid_amount}
-                    onChange={(e) => setPaymentData(prev => ({ ...prev, paid_amount: parseFloat(e.target.value) || 0 }))}
-                    placeholder={`৳${(bookingDetails.final_amount > 0 ? bookingDetails.final_amount : bookingDetails.total_amount).toFixed(2)}`}
-                  />
+
+                {/* Room Booking Details */}
+                <div className="form-section">
+                  <h3>Room Booking Details</h3>
+                  <div className="room-booking-item">
+                    <h4>Room Booking #1</h4>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Select Room</label>
+                        <input 
+                          type="text" 
+                          value={`Room ${bookingDetails.selectedRoom?.room_number || '[Room]'}`} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Room Type</label>
+                        <input 
+                          type="text" 
+                          value={bookingDetails.selectedRoom?.room_type || '[Room Type]'} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Number of Guests</label>
+                        <input 
+                          type="number" 
+                          value={bookingDetails.selectedRoom?.capacity || 1} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Check-in Date</label>
+                        <input 
+                          type="date" 
+                          value={bookingDetails.checkin_date || ''} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Check-out Date</label>
+                        <input 
+                          type="date" 
+                          value={bookingDetails.checkout_date || ''} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Total Nights</label>
+                        <input 
+                          type="number" 
+                          value={getNights()} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Original Price Per Night</label>
+                        <input 
+                          type="text" 
+                          value={`৳${bookingDetails.selectedRoom?.rate ? parseFloat(bookingDetails.selectedRoom.rate).toFixed(2) : '0.00'}`} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Discount Percentage</label>
+                        <input 
+                          type="number" 
+                          value={bookingDetails.discount_percentage} 
+                          onChange={(e) => handleDiscountChange(e.target.value)}
+                          className="form-control" 
+                          min="0" 
+                          max="100" 
+                          step="0.1"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Price After Discount Per Night</label>
+                        <input 
+                          type="text" 
+                          value={`৳${bookingDetails.selectedRoom?.rate ? ((parseFloat(bookingDetails.selectedRoom.rate) * (100 - bookingDetails.discount_percentage)) / 100).toFixed(2) : '0.00'}`} 
+                          disabled 
+                          className="form-control" 
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="booking-totals">
+                      <div className="total-item">
+                        <span>Original Total:</span>
+                        <span>৳{bookingDetails.total_amount?.toFixed(2) || '0.00'}</span>
+                      </div>
+                      <div className="total-item">
+                        <span>Final Total:</span>
+                        <span>৳{(bookingDetails.total_amount - bookingDetails.discount_amount)?.toFixed(2) || '0.00'}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Payment Tracking */}
+                <div className="form-section">
+                  <h3>Payment Tracking</h3>
+                  
+                  <div className="add-payment-form">
+                    <div className="form-grid payment-grid">
+                      <div className="form-group">
+                        <label>Payment Method</label>
+                        <select 
+                          value={newPayment.method} 
+                          onChange={(e) => setNewPayment(prev => ({...prev, method: e.target.value}))}
+                          className="form-control"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="card">Credit/Debit Card</option>
+                          <option value="bank_transfer">Bank Transfer</option>
+                          <option value="mobile_banking">Mobile Banking</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Amount</label>
+                        <input 
+                          type="number" 
+                          value={newPayment.amount} 
+                          onChange={(e) => setNewPayment(prev => ({...prev, amount: parseFloat(e.target.value) || 0}))}
+                          className="form-control" 
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Notes (Optional)</label>
+                        <input 
+                          type="text" 
+                          value={newPayment.notes} 
+                          onChange={(e) => setNewPayment(prev => ({...prev, notes: e.target.value}))}
+                          className="form-control" 
+                          placeholder="Payment reference, notes..."
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>&nbsp;</label>
+                        <button type="button" onClick={addPayment} className="btn btn-secondary">
+                          Add Payment
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment List */}
+                  {payments.length > 0 && (
+                    <div className="payment-list">
+                      <h4>Payments Added</h4>
+                      {payments.map((payment) => (
+                        <div key={payment.id} className="payment-item">
+                          <div className="payment-details">
+                            <div className="payment-method">{payment.method}</div>
+                            <div className="payment-amount">৳{payment.amount.toFixed(2)}</div>
+                            {payment.notes && <div className="payment-notes">{payment.notes}</div>}
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => removePayment(payment.id)}
+                            className="btn-remove"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Final Totals */}
+                <div className="form-section final-totals">
+                  <div className="totals-grid">
+                    <div className="total-row">
+                      <span>Original Room Charges:</span>
+                      <span>৳{bookingDetails.total_amount?.toFixed(2) || '0.00'}</span>
+                    </div>
+                    <div className="total-row">
+                      <span>Room Charges After Discount:</span>
+                      <span>৳{(bookingDetails.total_amount - bookingDetails.discount_amount)?.toFixed(2) || '0.00'}</span>
+                    </div>
+                    <div className="total-row">
+                      <span>Subtotal (Before VAT):</span>
+                      <span>৳{(bookingDetails.total_amount - bookingDetails.discount_amount)?.toFixed(2) || '0.00'}</span>
+                    </div>
+                    <div className="total-row">
+                      <span>VAT ({vatRate}%):</span>
+                      <span>
+                        <input 
+                          type="number"
+                          value={vatRate}
+                          onChange={(e) => setVatRate(parseFloat(e.target.value) || 0)}
+                          className="vat-input"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                        />
+                        ৳{bookingDetails.vat_amount?.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="total-row grand-total">
+                      <span>Final Total Amount:</span>
+                      <span>৳{bookingDetails.final_amount?.toFixed(2) || '0.00'}</span>
+                    </div>
+                    <div className="total-row">
+                      <span>Total Paid:</span>
+                      <span>৳{getTotalPaid().toFixed(2)}</span>
+                    </div>
+                    <div className="total-row due-amount">
+                      <span>Due Amount:</span>
+                      <span>৳{getDueAmount().toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
               </div>
-            </div>
+            ) : (
+              <div style={{padding: '2rem', textAlign: 'center', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: '0.5rem'}}>
+                <h3>Missing Booking Information</h3>
+                <p>Please go back and complete the previous steps.</p>
+                <button className="btn btn-secondary" onClick={handleBack}>
+                  <ArrowLeft size={20} />
+                  Go Back
+                </button>
+              </div>
+            )}
 
             <div className="step-actions">
               <button 
@@ -670,9 +1136,9 @@ const CreateBooking = () => {
               <button 
                 className="btn btn-primary"
                 onClick={handleCreateBooking}
-                disabled={loading}
+                disabled={loading || !bookingDetails.selectedRoom}
               >
-                {loading ? 'Processing...' : 'Confirm Booking & Payment'}
+                {loading ? 'Processing...' : 'Create Invoice & Confirm Booking'}
               </button>
             </div>
           </div>
@@ -745,6 +1211,23 @@ const CreateBooking = () => {
             </div>
 
             <div className="step-actions">
+              <button 
+                className="btn btn-secondary"
+                onClick={handleViewInvoice}
+              >
+                <Eye size={20} />
+                View/Print Invoice
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleDownloadInvoice}
+              >
+                <Download size={20} />
+                Download Invoice
+              </button>
+            </div>
+
+            <div className="step-actions" style={{ marginTop: '1rem' }}>
               <button 
                 className="btn btn-secondary"
                 onClick={() => window.location.href = '/bookings'}

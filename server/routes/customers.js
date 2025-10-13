@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import { getPool } from '../db.js';
+
 const router = express.Router();
-const { getPool } = require('../db');
 
 // Get all customers
 router.get('/', async (req, res) => {
@@ -105,4 +106,4 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

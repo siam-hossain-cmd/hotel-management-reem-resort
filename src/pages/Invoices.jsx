@@ -77,7 +77,8 @@ const Invoices = () => {
         alert('Invoice removed from list (delete API not implemented yet)');
       } catch (error) {
         console.error('Error deleting invoice:', error);
-        alert('Error deleting invoice: ' + error.message);
+        const errorMsg = error && error.message ? error.message : 'Unknown error occurred';
+        alert('Error deleting invoice: ' + errorMsg);
       } finally {
         setShowDeleteModal(false);
         setInvoiceToDelete(null);
@@ -197,58 +198,48 @@ const Invoices = () => {
           <div>Customer</div>
           <div>Amount</div>
           <div>Status</div>
-          <div>Check-in Date</div>
-          <div>Check-out Date</div>
           <div>Issue Date</div>
           <div>Due Date</div>
-          <div>Admin Name</div>
           <div>Actions</div>
         </div>
         
         {filteredInvoices.map((invoice) => (
           <div key={invoice.id} className="table-row">
             <div className="invoice-id">{invoice.id}</div>
-            <div>{invoice.customer}</div>
+            <div className="customer-name">{invoice.customer}</div>
             <div className="amount">৳{invoice.amount.toFixed(2)}</div>
             <div>
               <span className={`status-badge ${invoice.status.toLowerCase()}`}>
                 {invoice.status}
               </span>
             </div>
-            <div>{invoice.checkInDate}</div>
-            <div>{invoice.checkOutDate}</div>
-            <div>{invoice.date}</div>
-            <div>{invoice.dueDate}</div>
-            <div>{invoice.adminName}</div>
+            <div className="date-cell">{invoice.date}</div>
+            <div className="date-cell">{invoice.dueDate}</div>
             <div className="actions">
-              <button className="action-btn" title="View" onClick={() => handleView(invoice)}>
+              <button className="action-btn view" title="View" onClick={() => handleView(invoice)}>
                 <Eye size={16} />
               </button>
-              {canPerformAction('edit_invoice') && (
-                <button 
-                  className="action-btn" 
-                  title="Edit"
-                  onClick={() => handleEdit(invoice)}
-                >
-                  <Edit size={16} />
-                </button>
-              )}
               <button 
-                className="action-btn" 
+                className="action-btn edit" 
+                title="Edit"
+                onClick={() => handleEdit(invoice)}
+              >
+                <Edit size={16} />
+              </button>
+              <button 
+                className="action-btn download" 
                 title="Download"
                 onClick={() => handleDownload(invoice)}
               >
                 <Download size={16} />
               </button>
-              {canDeleteInvoice(invoice) && (
-                <button 
-                  className="action-btn delete" 
-                  title="Delete Invoice"
-                  onClick={() => handleDeleteClick(invoice)}
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
+              <button 
+                className="action-btn delete" 
+                title="Delete Invoice"
+                onClick={() => handleDeleteClick(invoice)}
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
           </div>
         ))}

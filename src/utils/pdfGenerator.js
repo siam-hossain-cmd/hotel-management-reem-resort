@@ -148,17 +148,17 @@ const generateInvoiceHTML = (invoice) => {
         <div>
           <h3 style="color: #1e293b; margin-bottom: 10px;">Bill To:</h3>
           <div style="color: #64748b;">
-            <p style="margin: 5px 0; font-weight: bold; color: #1e293b;">${invoice.customerInfo.name}</p>
-            <p style="margin: 5px 0;">${invoice.customerInfo.email}</p>
-            <p style="margin: 5px 0;">${invoice.customerInfo.phone}</p>
-            ${invoice.customerInfo.nid ? `<p style="margin: 5px 0;"><strong>NID:</strong> ${invoice.customerInfo.nid}</p>` : ''}
-            <p style="margin: 5px 0;">${invoice.customerInfo.address}</p>
+            <p style="margin: 5px 0; font-weight: bold; color: #1e293b;">${invoice.customerInfo?.name || 'Customer Name'}</p>
+            <p style="margin: 5px 0;">${invoice.customerInfo?.email || ''}</p>
+            <p style="margin: 5px 0;">${invoice.customerInfo?.phone || ''}</p>
+            ${invoice.customerInfo?.nid ? `<p style="margin: 5px 0;"><strong>NID:</strong> ${invoice.customerInfo.nid}</p>` : ''}
+            <p style="margin: 5px 0;">${invoice.customerInfo?.address || ''}</p>
           </div>
         </div>
         <div style="text-align: right;">
           <div style="margin-bottom: 20px;">
-            <p style="margin: 5px 0;"><strong>Invoice Date:</strong> ${new Date(invoice.invoiceDate).toLocaleDateString()}</p>
-            <p style="margin: 5px 0;"><strong>Due Date:</strong> ${new Date(invoice.dueDate).toLocaleDateString()}</p>
+            <p style="margin: 5px 0;"><strong>Invoice Date:</strong> ${new Date(invoice.invoiceDate || Date.now()).toLocaleDateString()}</p>
+            <p style="margin: 5px 0;"><strong>Due Date:</strong> ${new Date(invoice.dueDate || Date.now()).toLocaleDateString()}</p>
           </div>
         </div>
       </div>
@@ -177,15 +177,15 @@ const generateInvoiceHTML = (invoice) => {
           </tr>
         </thead>
         <tbody>
-          ${invoice.items.map(item => `
+          ${(invoice.items || []).map(item => `
             <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${new Date(item.checkInDate).toLocaleDateString()}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${new Date(item.checkOutDate).toLocaleDateString()}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount}</td>
-              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${item.perNightCost.toFixed(2)}</td>
-              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${item.amount.toFixed(2)}</td>
+              <td style="padding: 12px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber || 'Room'}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkInDate ? new Date(item.checkInDate).toLocaleDateString() : ''}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkOutDate ? new Date(item.checkOutDate).toLocaleDateString() : ''}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights || 0}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount || 1}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.perNightCost || 0).toFixed(2)}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.amount || 0).toFixed(2)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -226,30 +226,30 @@ const generateInvoiceHTML = (invoice) => {
           ` : ''}
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Room Charges After Discount:</span>
-            <span>৳${invoice.subtotal.toFixed(2)}</span>
+            <span>৳${(invoice.subtotal || 0).toFixed(2)}</span>
           </div>
           ${invoice.additionalTotal && invoice.additionalTotal > 0 ? `
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Additional Charges:</span>
-            <span>৳${invoice.additionalTotal.toFixed(2)}</span>
+            <span>৳${(invoice.additionalTotal || 0).toFixed(2)}</span>
           </div>
           ` : ''}
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 2px solid #e2e8f0; font-weight: 600;">
             <span>Subtotal (Before VAT):</span>
-            <span>৳${(invoice.subtotal + invoice.additionalTotal).toFixed(2)}</span>
+            <span>৳${((invoice.subtotal || 0) + (invoice.additionalTotal || 0)).toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
-            <span>VAT (${invoice.taxRate}%):</span>
-            <span>৳${invoice.tax.toFixed(2)}</span>
+            <span>VAT (${invoice.taxRate || 0}%):</span>
+            <span>৳${(invoice.tax || invoice.taxAmount || 0).toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 18px; border-top: 2px solid #3b82f6; border-bottom: 2px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
             <span>Final Total Amount:</span>
-            <span>৳${invoice.total.toFixed(2)}</span>
+            <span>৳${(invoice.total || 0).toFixed(2)}</span>
           </div>
           ${invoice.totalPaid && invoice.totalPaid > 0 ? `
           <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #059669; font-weight: 600;">
             <span>Total Paid:</span>
-            <span>৳${invoice.totalPaid.toFixed(2)}</span>
+            <span>৳${(invoice.totalPaid || 0).toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 16px; border-top: 2px solid #e2e8f0; color: ${invoice.dueAmount > 0 ? '#dc2626' : '#059669'};">
             <span>Due Amount:</span>

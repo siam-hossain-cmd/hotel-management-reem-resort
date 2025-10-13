@@ -93,5 +93,9 @@ export const api = {
   getInvoice: async (id) => {
     const res = await fetch(`${API_BASE}/invoices/${id}`);
     return res.json();
+  },
+  getInvoiceById: async (id) => {
+    const res = await fetch(`${API_BASE}/invoices/${id}`);
+    return res.json();
   }
 };

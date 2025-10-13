@@ -305,32 +305,70 @@ const CreateBooking = () => {
     calculateTotals();
   }, [invoice.items, invoice.additionalCharges, invoice.payments, invoice.taxRate]);
 
-  // Save invoice function
-  const saveInvoice = async () => {
+  // Save invoice and create booking
+  const saveInvoiceAndCreateBooking = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
       if (!invoice.customerInfo.name.trim()) {
         alert('Customer name is required');
         return;
       }
-      
       if (invoice.items.length === 0 || invoice.items.every(item => item.amount === 0)) {
         alert('Please add at least one room item with amount');
         return;
       }
 
-      const result = await invoiceService.saveInvoice(invoice);
+      // 1. Create the booking first to get a booking ID
+      const bookingData = {
+        first_name: guestInfo.firstName,
+        last_name: guestInfo.lastName,
+        email: guestInfo.email,
+        phone: guestInfo.phone,
+        address: guestInfo.address,
+        id_type: guestInfo.idType,
+        id_number: guestInfo.idNumber,
+        special_requests: guestInfo.specialRequests,
+        
+        room_number: selectedRoom.roomNumber,
+        room_type: selectedRoom.roomType,
+        checkin_date: searchCriteria.checkInDate,
+        checkout_date: searchCriteria.checkOutDate,
+        capacity: searchCriteria.guestCount,
+        
+        total_amount: invoice.total,
+        payment_status: invoice.paymentStatus, // This will be updated based on invoice
+        status: 'confirmed', // All new bookings are confirmed
+        
+        created_by: user?.name || user?.email || 'Unknown',
+      };
+
+      const bookingResult = await bookingService.createBooking(bookingData);
+
+      if (!bookingResult.success) {
+        throw new Error(bookingResult.error || 'Failed to create booking document.');
+      }
+
+      // 2. Create the invoice, linking it to the booking
+      const invoiceToSave = {
+        ...invoice,
+        bookingId: bookingResult.id, // Link invoice to booking
+        bookingRef: bookingResult.bookingReference, // Use reference from created booking
+      };
       
-      if (result.success) {
-        alert('Invoice saved successfully!');
+      const invoiceResult = await invoiceService.createInvoice(invoiceToSave);
+
+      if (invoiceResult.success) {
+        alert('Booking and Invoice created successfully!');
+        setInvoice(prev => ({ ...prev, id: invoiceResult.id })); // Update invoice state with new ID
         setCurrentStep(4); // Move to confirmation step
       } else {
-        alert('Failed to save invoice: ' + result.error);
+        // If invoice fails, we should ideally roll back the booking creation
+        await bookingService.deleteBooking(bookingResult.id);
+        throw new Error(invoiceResult.error || 'Failed to save invoice. Booking was rolled back.');
       }
     } catch (error) {
-      console.error('Error saving invoice:', error);
-      alert('Error occurred while saving invoice');
+      console.error('Error in saveInvoiceAndCreateBooking:', error);
+      alert('Error occurred: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -966,11 +1004,11 @@ const CreateBooking = () => {
               </button>
               <button 
                 className="btn btn-success" 
-                onClick={saveInvoice}
+                onClick={saveInvoiceAndCreateBooking}
                 disabled={loading}
               >
                 <Save size={20} />
-                {loading ? 'Saving...' : 'Save Invoice'}
+                {loading ? 'Saving...' : 'Save & Confirm Booking'}
               </button>
             </div>
           </div>

@@ -44,7 +44,7 @@ export const bookingService = {
         ...bookingData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        status: 'pending', // pending, confirmed, paid, checked-in, checked-out, cancelled
+        status: 'confirmed', // confirmed instead of pending - when booking is completed it's automatically confirmed
         paymentStatus: 'unpaid' // unpaid, partial, paid, refunded
       };
       

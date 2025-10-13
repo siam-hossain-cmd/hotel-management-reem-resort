@@ -1,17 +1,16 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const admin = require('firebase-admin');
-const { initDb } = require('./db');
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import admin from 'firebase-admin';
+import { initDb } from './db.js';
 
-const verifyFirebaseToken = require('./middleware/verifyFirebaseToken');
+import verifyFirebaseToken from './middleware/verifyFirebaseToken.js';
 
-const roomsRouter = require('./routes/rooms');
-const bookingsRouter = require('./routes/bookings');
-const invoicesRouter = require('./routes/invoices');
-const customersRouter = require('./routes/customers');
-const migrateRouter = require('./routes/migrate');
+import roomsRouter from './routes/rooms.js';
+import bookingsRouter from './routes/bookings.js';
+import invoicesRouter from './routes/invoices.js';
+import customersRouter from './routes/customers.js';
+import migrateRouter from './routes/migrate.js';
 
 // Initialize Firebase Admin
 if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -25,7 +24,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   }
 } else if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
   try {
-    const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+    // For ES modules, we need to use dynamic import for JSON files
+    const { default: serviceAccount } = await import(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, { assert: { type: 'json' } });
     admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     console.log('Firebase Admin initialized from path');
   } catch (err) {
