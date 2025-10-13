@@ -8,8 +8,15 @@ router.get('/', async (req, res) => {
   try {
     const pool = getPool();
     const [rows] = await pool.query(`
-      SELECT b.*, c.first_name, c.last_name, c.email, c.phone, 
-             r.room_number, r.room_type
+      SELECT 
+        b.*, 
+        c.first_name, 
+        c.last_name, 
+        c.email, 
+        c.phone, 
+        r.room_number, 
+        r.room_type,
+        (SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = b.id) as paid_amount
       FROM bookings b
       LEFT JOIN customers c ON b.customer_id = c.id
       LEFT JOIN rooms r ON b.room_id = r.id
@@ -22,37 +29,101 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get a single booking by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const pool = getPool();
+    const bookingId = req.params.id;
+
+    const [rows] = await pool.query(`
+      SELECT 
+        b.*, 
+        c.first_name, 
+        c.last_name, 
+        c.email, 
+        c.phone, 
+        c.address,
+        r.room_number, 
+        r.room_type,
+        (SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = b.id) as paid_amount
+      FROM bookings b
+      LEFT JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN rooms r ON b.room_id = r.id
+      WHERE b.id = ?
+    `, [bookingId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+
+    // Also fetch payment history
+    const [payments] = await pool.query('SELECT * FROM payments WHERE booking_id = ? ORDER BY processed_at DESC', [bookingId]);
+
+    const booking = rows[0];
+    booking.payments = payments;
+
+    res.json({ success: true, booking });
+  } catch (err) {
+    console.error(`Failed to fetch booking ${req.params.id}:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Create booking with auto customer creation and room status update
 router.post('/', async (req, res) => {
   const pool = getPool();
   const conn = await pool.getConnection();
   try {
+    console.log('🔵 Booking creation request received');
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    
     const { 
-      guestInfo, 
-      room_id, 
+      first_name,
+      last_name,
+      email,
+      phone,
+      address,
+      id_type,
+      id_number,
+      special_requests,
+      room_number,
+      room_type,
       checkin_date, 
       checkout_date, 
+      capacity,
       total_amount,
-      original_amount,
-      discount_percentage = 0,
-      discount_amount = 0,
-      currency = 'BDT',
-      auto_checkin = false,
-      payment_method = 'cash',
-      paid_amount = 0,
-      payment_status = 'pending'
+      paid_amount,
+      payment_status,
+      status,
+      created_by,
+      payments,
     } = req.body;
     
-    if (!guestInfo || !room_id || !checkin_date || !checkout_date) {
-      return res.status(400).json({ success: false, error: 'Missing required fields: guestInfo, room_id, checkin_date, checkout_date' });
+    const guestInfo = {
+        first_name,
+        last_name,
+        email,
+        phone,
+        address,
+        id_type,
+        id_number,
+        special_requests,
+    };
+
+    // Validate required fields
+    if (!first_name || !last_name || !phone || !room_number || !checkin_date || !checkout_date) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: first_name, last_name, phone, room_number, checkin_date, checkout_date' 
+      });
     }
 
     await conn.beginTransaction();
 
     // Check if room exists and is available
     const [roomCheck] = await conn.query(
-      'SELECT id, room_number, room_type, status FROM rooms WHERE id = ? FOR UPDATE',
-      [room_id]
+      'SELECT id, room_number, room_type, status FROM rooms WHERE room_number = ? FOR UPDATE',
+      [room_number]
     );
     
     if (roomCheck.length === 0) {
@@ -61,6 +132,7 @@ router.post('/', async (req, res) => {
     }
 
     const room = roomCheck[0];
+    const room_id = room.id;
 
     // Check for overlapping confirmed bookings for the room
     const [conflicts] = await conn.query(
@@ -88,13 +160,13 @@ router.post('/', async (req, res) => {
         // Update customer info
         await conn.query(
           'UPDATE customers SET first_name = ?, last_name = ?, phone = ?, address = ?, nid = ?, updated_at = NOW() WHERE id = ?',
-          [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.nid || null, customer_id]
+          [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null, customer_id]
         );
       } else {
         // Create new customer
         const [customerResult] = await conn.query(
           'INSERT INTO customers (first_name, last_name, email, phone, address, nid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
-          [guestInfo.first_name, guestInfo.last_name, guestInfo.email, guestInfo.phone, guestInfo.address || null, guestInfo.nid || null]
+          [guestInfo.first_name, guestInfo.last_name, guestInfo.email, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null]
         );
         customer_id = customerResult.insertId;
       }
@@ -102,7 +174,7 @@ router.post('/', async (req, res) => {
       // Create customer without email
       const [customerResult] = await conn.query(
         'INSERT INTO customers (first_name, last_name, phone, address, nid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-        [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.nid || null]
+        [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null]
       );
       customer_id = customerResult.insertId;
     }
@@ -110,23 +182,67 @@ router.post('/', async (req, res) => {
     // Generate booking reference
     const bookingRef = `BK${Date.now().toString().slice(-6)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
 
-    // Insert booking
-    const bookingStatus = auto_checkin ? 'checked_in' : 'confirmed';
+    // Insert booking WITHOUT paid_amount first (we'll calculate it from payments table)
     const [bookingResult] = await conn.query(
-      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, currency, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [bookingRef, customer_id, room_id, bookingStatus, checkin_date, checkout_date, total_amount || 0, currency]
+      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [bookingRef, customer_id, room_id, status, checkin_date, checkout_date, total_amount || 0]
     );
 
     const bookingId = bookingResult.insertId;
 
-    // Update room status to occupied if auto check-in or immediate booking
-    const newRoomStatus = auto_checkin || new Date(checkin_date) <= new Date() ? 'occupied' : room.status;
-    if (newRoomStatus !== room.status) {
-      await conn.query(
-        'UPDATE rooms SET status = ? WHERE id = ?',
-        [newRoomStatus, room_id]
-      );
+    // Calculate actual paid amount from payments array
+    let calculatedPaidAmount = 0;
+    
+    // Insert payments if they exist in the payments array
+    console.log('📊 Payment data received:', JSON.stringify(payments, null, 2));
+    if (payments && payments.length > 0) {
+        for (const payment of payments) {
+            console.log('💳 Inserting payment:', {
+                bookingId,
+                amount: payment.amount,
+                method: payment.method,
+                notes: payment.notes || payment.description
+            });
+            
+            await conn.query(
+                'INSERT INTO payments (booking_id, amount, gateway, gateway_payment_id, status, processed_at, currency) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [
+                    bookingId, 
+                    payment.amount, 
+                    payment.method || 'cash', // Store payment method in gateway field
+                    payment.notes || payment.description || '', // Store notes/description in gateway_payment_id
+                    'completed', // Mark as completed since it's a direct payment
+                    new Date(), // Use current time as processed_at
+                    'BDT'
+                ]
+            );
+            calculatedPaidAmount += parseFloat(payment.amount) || 0;
+        }
+        console.log('✅ Total paid amount calculated:', calculatedPaidAmount);
+    } else {
+        console.log('⚠️ No payments array provided or empty array');
+    }
+
+    // Calculate payment status based on actual paid amount
+    let calculatedPaymentStatus = 'unpaid';
+    if (calculatedPaidAmount >= (total_amount || 0)) {
+        calculatedPaymentStatus = 'paid';
+    } else if (calculatedPaidAmount > 0) {
+        calculatedPaymentStatus = 'partial';
+    }
+
+    // Note: paid_amount is calculated dynamically in GET queries from payments table
+    // We don't store it in the bookings table to avoid data inconsistency
+
+    // Update room status to occupied if booking is for today or in the past
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    if (new Date(checkin_date) <= today) {
+        await conn.query(
+            'UPDATE rooms SET status = ? WHERE id = ?',
+            ['occupied', room_id]
+        );
     }
 
     // Create invoice for the booking
@@ -134,7 +250,7 @@ router.post('/', async (req, res) => {
     const [invoiceResult] = await conn.query(
       `INSERT INTO invoices (invoice_number, booking_id, customer_id, issued_at, total, currency, status, created_at)
        VALUES (?, ?, ?, NOW(), ?, ?, 'issued', NOW())`,
-      [invoiceNumber, bookingId, customer_id, total_amount || 0, currency]
+      [invoiceNumber, bookingId, customer_id, total_amount || 0, 'BDT']
     );
 
     await conn.commit();
@@ -148,11 +264,13 @@ router.post('/', async (req, res) => {
         room_id,
         room_number: room.room_number,
         room_type: room.room_type,
-        status: bookingStatus,
+        status: status,
         checkin_date,
         checkout_date,
         total_amount,
-        currency
+        paid_amount: calculatedPaidAmount,
+        payment_status: calculatedPaymentStatus,
+        currency: 'BDT'
       },
       invoice_id: invoiceResult.insertId,
       invoice_number: invoiceNumber

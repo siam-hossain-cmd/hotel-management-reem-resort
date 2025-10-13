@@ -34,17 +34,17 @@ const Bookings = () => {
         
         const transformedBookings = bookingResult.bookings.map(booking => {
           const relatedInvoice = invoices.find(inv => inv.bookingId === booking.id);
-          let paymentStatus = 'unpaid'; // Default to unpaid
-          let paidAmount = 0;
           const totalAmount = parseFloat(booking.total_amount) || 0;
-
-          if (relatedInvoice) {
-            paidAmount = relatedInvoice.totalPaid || 0;
-            if (paidAmount >= totalAmount) {
-              paymentStatus = 'paid';
-            } else if (paidAmount > 0) {
-              paymentStatus = 'partial';
-            }
+          
+          // Use paid_amount from booking data (calculated from payments table)
+          let paidAmount = parseFloat(booking.paid_amount) || 0;
+          
+          // Calculate payment status based on paid amount
+          let paymentStatus = 'unpaid';
+          if (paidAmount >= totalAmount) {
+            paymentStatus = 'paid';
+          } else if (paidAmount > 0) {
+            paymentStatus = 'partial';
           }
           
           const dueBalance = totalAmount - paidAmount;

@@ -336,10 +336,12 @@ const CreateBooking = () => {
         capacity: searchCriteria.guestCount,
         
         total_amount: invoice.total,
-        payment_status: invoice.paymentStatus, // This will be updated based on invoice
+        paid_amount: invoice.totalPaid,
+        payment_status: invoice.dueAmount <= 0 ? 'paid' : invoice.totalPaid > 0 ? 'partial' : 'unpaid',
         status: 'confirmed', // All new bookings are confirmed
         
         created_by: user?.name || user?.email || 'Unknown',
+        payments: invoice.payments, // Pass payment details
       };
 
       const bookingResult = await bookingService.createBooking(bookingData);

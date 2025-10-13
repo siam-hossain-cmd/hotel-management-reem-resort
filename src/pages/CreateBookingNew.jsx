@@ -237,110 +237,29 @@ const CreateBooking = () => {
         return;
       }
       
-      // Try multiple data structure approaches
-      const bookingDataStructures = [
-        // Structure 1: With guestInfo object
-        {
-          guestInfo: {
-            first_name: guestInfo.first_name,
-            last_name: guestInfo.last_name,
-            email: guestInfo.email,
-            phone: guestInfo.phone,
-            address: guestInfo.address,
-            nid: guestInfo.nid
-          },
-          room_id: bookingDetails.room_id,
-          checkin_date: bookingDetails.checkin_date,
-          checkout_date: bookingDetails.checkout_date,
-          total_amount: finalAmount,
-          discount_percentage: bookingDetails.discount_percentage || 0,
-          discount_amount: bookingDetails.discount_amount || 0,
-          final_amount: finalAmount,
-          auto_checkin: bookingDetails.auto_checkin || false,
-          status: 'confirmed', // Set booking status as confirmed when created
-          payment_method: payments.length > 0 ? payments[0].method : 'cash',
-          payment_status: paymentStatus,
-          paid_amount: totalPaid,
-          user_id: user?.uid || null,
-          payments: payments,
-          payment_details: {
-            payments: payments,
-            total_paid: totalPaid,
-            due_amount: getDueAmount()
-          }
-        },
-        // Structure 2: Flat structure with individual guest fields
-        {
-          first_name: guestInfo.first_name,
-          last_name: guestInfo.last_name,
-          email: guestInfo.email,
-          phone: guestInfo.phone,
-          address: guestInfo.address,
-          nid: guestInfo.nid,
-          room_id: bookingDetails.room_id,
-          checkin_date: bookingDetails.checkin_date,
-          checkout_date: bookingDetails.checkout_date,
-          total_amount: finalAmount,
-          discount_percentage: bookingDetails.discount_percentage || 0,
-          discount_amount: bookingDetails.discount_amount || 0,
-          final_amount: finalAmount,
-          auto_checkin: bookingDetails.auto_checkin || false,
-          status: 'confirmed', // Set booking status as confirmed when created
-          payment_method: payments.length > 0 ? payments[0].method : 'cash',
-          payment_status: paymentStatus,
-          paid_amount: totalPaid,
-          user_id: user?.uid || null,
-          payments: payments,
-          payment_details: {
-            payments: payments,
-            total_paid: totalPaid,
-            due_amount: getDueAmount()
-          }
-        },
-        // Structure 3: Combined approach
-        {
-          ...guestInfo,
-          ...bookingDetails,
-          total_amount: finalAmount,
-          final_amount: finalAmount,
-          status: 'confirmed', // Set booking status as confirmed when created
-          payment_method: payments.length > 0 ? payments[0].method : 'cash',
-          payment_status: paymentStatus,
-          paid_amount: totalPaid,
-          user_id: user?.uid || null,
-          payments: payments,
-          payment_details: {
-            payments: payments,
-            total_paid: totalPaid,
-            due_amount: getDueAmount()
-          }
-        }
-      ];
+      // Use the correct structure that matches backend expectations
+      const bookingData = {
+        first_name: guestInfo.first_name,
+        last_name: guestInfo.last_name,
+        email: guestInfo.email,
+        phone: guestInfo.phone,
+        address: guestInfo.address,
+        id_number: guestInfo.nid,
+        room_number: bookingDetails.selectedRoom?.room_number,
+        checkin_date: bookingDetails.checkin_date,
+        checkout_date: bookingDetails.checkout_date,
+        total_amount: finalAmount,
+        status: 'confirmed',
+        payment_status: paymentStatus,
+        paid_amount: totalPaid,
+        payments: payments
+      };
       
-      let response = null;
-      let lastError = null;
+      console.log('Creating booking with data:', bookingData);
       
-      // Try each structure until one works
-      for (let i = 0; i < bookingDataStructures.length; i++) {
-        const bookingData = bookingDataStructures[i];
-        console.log(`Trying booking data structure ${i + 1}:`, bookingData);
-        
-        try {
-          response = await api.createBooking(bookingData);
-          if (response.success) {
-            console.log(`Success with structure ${i + 1}`);
-            break;
-          } else {
-            console.log(`Failed with structure ${i + 1}:`, response.error);
-            lastError = response.error;
-          }
-        } catch (error) {
-          console.log(`Exception with structure ${i + 1}:`, error);
-          lastError = error.message;
-        }
-      }
+      const response = await api.createBooking(bookingData);
 
-      if (response && response.success) {
+      if (response.success) {
         setBookingResult(response);
         // Also fetch the full invoice data for the confirmation page
         if (response.invoice_id) {
@@ -355,8 +274,8 @@ const CreateBooking = () => {
         }
         setCurrentStep(5);
       } else {
-        console.error('All booking attempts failed. Last error:', lastError);
-        alert(`Failed to create booking: ${lastError || 'Unknown error'}`);
+        console.error('Booking creation failed:', response.error);
+        alert(`Failed to create booking: ${response.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error creating booking:', error);
