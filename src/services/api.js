@@ -60,6 +60,27 @@ export const api = {
     });
     return res.json();
   },
+  deleteBooking: async (id) => {
+    const response = await fetch(`${API_BASE}/bookings/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      }
+    });
+    return response.json();
+  },
+  updateBookingStatus: async (id, statusPayload) => {
+    const response = await fetch(`${API_BASE}/bookings/${id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      },
+      body: JSON.stringify(statusPayload)
+    });
+    return response.json();
+  },
 
   // Customers (temporarily public)
   getCustomers: async () => {
