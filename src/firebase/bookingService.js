@@ -236,18 +236,36 @@ export const bookingService = {
 
   // Check in guest
   checkIn: async (id) => {
-    return await bookingService.updateBooking(id, { 
-      status: 'checked-in',
-      checkedInAt: serverTimestamp()
-    });
+    try {
+      // Use MySQL backend API for check-in
+      const result = await api.updateBookingStatus(id, { status: 'checked_in' });
+      console.log('API checkIn result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error checking in via API:', error);
+      // Fallback to Firestore if API fails
+      return await bookingService.updateBooking(id, { 
+        status: 'checked-in',
+        checkedInAt: serverTimestamp()
+      });
+    }
   },
 
   // Check out guest
   checkOut: async (id) => {
-    return await bookingService.updateBooking(id, { 
-      status: 'checked-out',
-      checkedOutAt: serverTimestamp()
-    });
+    try {
+      // Use MySQL backend API for check-out
+      const result = await api.updateBookingStatus(id, { status: 'checked_out' });
+      console.log('API checkOut result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error checking out via API:', error);
+      // Fallback to Firestore if API fails
+      return await bookingService.updateBooking(id, { 
+        status: 'checked-out',
+        checkedOutAt: serverTimestamp()
+      });
+    }
   },
 
   // Get recent bookings

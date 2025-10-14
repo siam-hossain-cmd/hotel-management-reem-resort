@@ -310,6 +310,12 @@ const generateInvoiceHTML = (invoice) => {
 
 export const previewInvoice = (invoice) => {
   const previewWindow = window.open('', '_blank', 'width=800,height=600');
+  
+  if (!previewWindow) {
+    alert('Popup blocked! Please allow popups for this site to view the invoice.');
+    return;
+  }
+  
   previewWindow.document.write(`
     <!DOCTYPE html>
     <html>

@@ -432,52 +432,48 @@
   align-items: center;
 }
 
+/* Action buttons */
 .action-btn {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-  background-color: #f3f4f6;
-  color: #374151;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
+  gap: 5px;
+  font-size: 0.85rem;
+  transition: all 0.2s;
   font-weight: 500;
-}
-
-.action-btn.view {
-  background-color: #eff6ff;
-  color: #3b82f6;
-  border-color: #bfdbfe;
-}
-.action-btn.view:hover {
-  background-color: #dbeafe;
-}
-
-.action-btn.invoice {
-  background-color: #f0fdfa;
-  color: #0d9488;
-  border-color: #99f6e4;
-}
-.action-btn.invoice:hover {
-  background-color: #ccfbf1;
-}
-
-.action-btn.delete {
-  background-color: #fef2f2;
-  color: #ef4444;
-  border-color: #fecaca;
-}
-.action-btn.delete:hover {
-  background-color: #fee2e2;
 }
 
 .action-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.view {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.action-btn.edit {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.action-btn.delete {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: #333;
+}
+
+.action-btn.payment {
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  color: white;
+}
+
+.action-btn.view-invoice {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
 }
 
 .invoice-btn:hover {
@@ -506,6 +502,21 @@
   color: #374151;
 }
 
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
 /* View Modal Styles */
 .view-modal {
   background: white;
@@ -513,6 +524,707 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   max-width: 700px;
   width: 90%;
+}
+
+/* Large View Modal for Financial Breakdown */
+.view-modal-large {
+  max-width: 900px;
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Modal Header */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 0.75rem 0.75rem 0 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* Modal Body */
+.modal-body {
+  padding: 1.5rem;
+  max-height: calc(90vh - 100px);
+  overflow-y: auto;
+}
+
+/* Booking Info Section */
+.booking-info-section {
+  margin-bottom: 1.5rem;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.info-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.info-label {
+  font-size: 0.65rem;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 0.35rem;
+}
+
+.info-value {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.info-sublabel {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+/* Financial Breakdown Section */
+.financial-breakdown-section {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: #1e293b;
+}
+
+.section-header h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Financial Cards */
+.financial-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.financial-card {
+  background: white;
+  padding: 0.875rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-left: 3px solid #3b82f6;
+  transition: all 0.2s ease;
+}
+
+.financial-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.base-amount-card {
+  border-left-color: #3b82f6;
+  background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+}
+
+.discount-card {
+  border-left-color: #ef4444;
+  background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);
+}
+
+.after-discount-card {
+  border-left-color: #10b981;
+  background: linear-gradient(135deg, #ffffff 0%, #ecfdf5 100%);
+}
+
+.charges-card {
+  border-left-color: #f59e0b;
+  background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%);
+}
+
+.card-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 0.35rem;
+}
+
+.card-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 0.15rem;
+}
+
+.card-detail {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Charges List */
+.charges-list {
+  background: white;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.charges-list-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.charge-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.2s ease;
+}
+
+.charge-item:last-child {
+  border-bottom: none;
+}
+
+.charge-item:hover {
+  background: #f8fafc;
+}
+
+.charge-desc {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.charge-bullet {
+  color: #f59e0b;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.charge-name {
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.15rem;
+  font-size: 0.875rem;
+}
+
+.charge-date {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.charge-amount {
+  font-weight: 700;
+  color: #f59e0b;
+  font-size: 0.95rem;
+}
+
+/* Payment History List */
+.payments-list {
+  background: #f0fdf4;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid #bbf7d0;
+}
+
+.payments-list-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #166534;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid #86efac;
+}
+
+.payment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid #dcfce7;
+  transition: background 0.2s ease;
+  background: white;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.payment-item:last-child {
+  margin-bottom: 0;
+}
+
+.payment-item:hover {
+  background: #f0fdf4;
+}
+
+.payment-desc {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.payment-bullet {
+  color: #10b981;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.payment-method {
+  font-weight: 600;
+  color: #166534;
+  margin-bottom: 0.15rem;
+  font-size: 0.875rem;
+}
+
+.payment-date {
+  font-size: 0.7rem;
+  color: #4ade80;
+}
+
+.payment-reference {
+  font-size: 0.7rem;
+  color: #22c55e;
+  font-style: italic;
+}
+
+.payment-notes {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+}
+
+.payment-amount {
+  font-weight: 700;
+  color: #10b981;
+  font-size: 0.95rem;
+}
+
+/* Total Summary */
+.total-summary {
+  background: white;
+  padding: 0.875rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Charges and Payments Sections */
+.charges-section,
+.payments-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.charges-section h4,
+.payments-section h4 {
+  color: #334155;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* Financial Summary Card - New Attractive Design */
+.financial-summary-card {
+  margin-top: 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.financial-header {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.financial-header h4 {
+  color: white;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.financial-body {
+  background: white;
+  padding: 1.5rem;
+}
+
+.breakdown-section {
+  margin-bottom: 1rem;
+}
+
+.breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  transition: all 0.2s ease;
+}
+
+.breakdown-item:hover {
+  transform: translateX(5px);
+}
+
+.breakdown-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.breakdown-icon {
+  font-size: 1.25rem;
+}
+
+.breakdown-value {
+  font-weight: 600;
+  color: #334155;
+  font-size: 1rem;
+}
+
+.breakdown-value.additional {
+  color: #f59e0b;
+}
+
+.breakdown-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+  margin: 0.5rem 0;
+}
+
+.subtotal-row {
+  font-weight: 600;
+  padding-top: 0.5rem;
+}
+
+.subtotal-row .breakdown-label {
+  color: #334155;
+  font-weight: 600;
+}
+
+.grand-total-row {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: 1rem -1.5rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.grand-total-label {
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.grand-total-amount {
+  color: white;
+  font-size: 1.75rem;
+  font-weight: 800;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.payment-status-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.payment-status-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.3s ease;
+}
+
+.payment-status-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.payment-status-item.paid {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border: 2px solid #10b981;
+}
+
+.payment-status-item.balance.due {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 2px solid #ef4444;
+}
+
+.payment-status-item.balance.clear {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 2px solid #3b82f6;
+}
+
+.status-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.payment-status-item.paid .status-icon {
+  background: #10b981;
+  color: white;
+}
+
+.payment-status-item.balance.due .status-icon {
+  background: #ef4444;
+  color: white;
+}
+
+.payment-status-item.balance.clear .status-icon {
+  background: #3b82f6;
+  color: white;
+}
+
+.status-content {
+  flex: 1;
+}
+
+.status-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.payment-status-item.paid .status-label {
+  color: #065f46;
+}
+
+.payment-status-item.balance.due .status-label {
+  color: #991b1b;
+}
+
+.payment-status-item.balance.clear .status-label {
+  color: #1e40af;
+}
+
+.status-amount {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.payment-status-item.paid .status-amount {
+  color: #047857;
+}
+
+.payment-status-item.balance.due .status-amount {
+  color: #dc2626;
+}
+
+.payment-status-item.balance.clear .status-amount {
+  color: #2563eb;
+}
+
+/* Responsive Design for Financial Summary */
+@media (max-width: 768px) {
+  .payment-status-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .grand-total-amount {
+    font-size: 1.5rem;
+  }
+  
+  .financial-body {
+    padding: 1rem;
+  }
+}
+
+.payment-received {
+  font-size: 0.7rem;
+  color: #3b82f6;
+  margin-left: 0.5rem;
+}
+
+.no-data-message {
+  color: #64748b;
+  font-size: 0.875rem;
+  font-style: italic;
+  padding: 1rem;
+  text-align: center;
+  background: white;
+  border-radius: 0.375rem;
+  border: 1px dashed #cbd5e1;
+}
+
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.95rem;
+}
+
+.total-row:last-child {
+  border-bottom: none;
+}
+
+.grand-total {
+  background: white;
+  color: #1e293b;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: 2px solid #10b981;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
+}
+
+.grand-total span {
+  color: #1e293b;
+}
+
+.paid-amount {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.due-amount {
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Status Section */
+.status-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 0.375rem;
+  border: 1px solid #e2e8f0;
+}
+
+.status-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.status-item span:last-child {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+/* Responsive Design for New Layout */
+@media (max-width: 768px) {
+  .view-modal-large {
+    width: 98%;
+    max-height: 95vh;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .financial-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .status-section {
+    grid-template-columns: 1fr;
+  }
+
+  .card-amount {
+    font-size: 1.5rem;
+  }
+
+  .charge-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
 }
 
 .booking-details-grid {
@@ -530,6 +1242,10 @@
   background-color: #f8fafc;
   border-radius: 0.375rem;
   border: 1px solid #e2e8f0;
+}
+
+.detail-item.full-width {
+  grid-column: 1 / -1;
 }
 
 .detail-item span:first-child {
@@ -804,3 +1520,60 @@
   margin-top: 0.5rem;
   text-align: center;
 }
+
+/* Add Charge Modal */
+.booking-info-summary {
+  background-color: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+.booking-info-summary p {
+  margin: 0.5rem 0;
+  color: #475569;
+}
+
+.booking-info-summary strong {
+  color: #1e293b;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 500;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-control select,
+select.form-control {
+  cursor: pointer;
+  background-color: white;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+

@@ -96,6 +96,29 @@ export const invoiceService = {
     }
   },
 
+  // Get invoice by booking ID
+  getInvoiceByBookingId: async (bookingId) => {
+    try {
+      const q = query(
+        invoiceService.getInvoicesCollection(),
+        where('bookingId', '==', bookingId),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        return { success: false, error: 'No invoice found for this booking' };
+      }
+      const invoice = {
+        id: snapshot.docs[0].id,
+        ...snapshot.docs[0].data()
+      };
+      return { success: true, invoice };
+    } catch (error) {
+      console.error('Error fetching invoice by booking ID:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Update invoice
   updateInvoice: async (id, updateData) => {
     try {

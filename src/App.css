@@ -423,6 +423,24 @@ body {
   background-color: #e2e8f0;
 }
 
+.btn-info {
+  background-color: #0ea5e9;
+  color: white;
+}
+
+.btn-info:hover {
+  background-color: #0284c7;
+}
+
+.btn-success {
+  background-color: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #059669;
+}
+
 /* Filters */
 .filters {
   display: flex;

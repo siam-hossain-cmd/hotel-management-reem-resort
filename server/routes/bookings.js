@@ -59,8 +59,12 @@ router.get('/:id', async (req, res) => {
     // Also fetch payment history
     const [payments] = await pool.query('SELECT * FROM payments WHERE booking_id = ? ORDER BY processed_at DESC', [bookingId]);
 
+    // Fetch booking charges
+    const [charges] = await pool.query('SELECT * FROM booking_charges WHERE booking_id = ? ORDER BY created_at DESC', [bookingId]);
+
     const booking = rows[0];
     booking.payments = payments;
+    booking.charges = charges;
 
     res.json({ success: true, booking });
   } catch (err) {
@@ -92,6 +96,9 @@ router.post('/', async (req, res) => {
       checkout_date, 
       capacity,
       total_amount,
+      base_amount,
+      discount_percentage,
+      discount_amount,
       paid_amount,
       payment_status,
       status,
@@ -184,9 +191,9 @@ router.post('/', async (req, res) => {
 
     // Insert booking WITHOUT paid_amount first (we'll calculate it from payments table)
     const [bookingResult] = await conn.query(
-      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [bookingRef, customer_id, room_id, status, checkin_date, checkout_date, total_amount || 0]
+      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, base_amount, discount_percentage, discount_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [bookingRef, customer_id, room_id, status, checkin_date, checkout_date, total_amount || 0, base_amount || total_amount || 0, discount_percentage || 0, discount_amount || 0]
     );
 
     const bookingId = bookingResult.insertId;
@@ -292,7 +299,9 @@ router.put('/:id/status', async (req, res) => {
     const { status } = req.body;
     const bookingId = req.params.id;
     
-    if (!['pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled'].includes(status)) {
+    // Validate status - support both hyphenated and underscored formats
+    const validStatuses = ['pending', 'confirmed', 'checked_in', 'checked-in', 'checked_out', 'checked-out', 'cancelled'];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, error: 'Invalid status' });
     }
 
@@ -311,15 +320,18 @@ router.put('/:id/status', async (req, res) => {
 
     const currentBooking = booking[0];
 
+    // Normalize status to use underscores for database storage
+    const normalizedStatus = status.replace('-', '_');
+
     // Update booking status
     await conn.query(
       'UPDATE bookings SET status = ?, updated_at = NOW() WHERE id = ?',
-      [status, bookingId]
+      [normalizedStatus, bookingId]
     );
 
     // Update room status based on booking status
     let newRoomStatus;
-    switch (status) {
+    switch (normalizedStatus) {
       case 'checked_in':
         newRoomStatus = 'occupied';
         break;
@@ -339,7 +351,7 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await conn.commit();
-    res.json({ success: true, message: 'Booking status updated successfully' });
+    res.json({ success: true, message: 'Booking status updated successfully', status: normalizedStatus });
   } catch (err) {
     await conn.rollback();
     console.error('Failed to update booking status:', err);
@@ -388,6 +400,230 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   } finally {
     conn.release();
+  }
+});
+
+// Add charge to a booking
+router.post('/:id/charges', async (req, res) => {
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    const bookingId = req.params.id;
+    const { description, amount } = req.body;
+
+    // Validate input
+    if (!description || !amount) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Description and amount are required' 
+      });
+    }
+
+    if (isNaN(amount) || parseFloat(amount) <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Amount must be a positive number' 
+      });
+    }
+
+    await conn.beginTransaction();
+
+    // Check if booking exists
+    const [bookingRows] = await conn.query(
+      'SELECT id, total_amount FROM bookings WHERE id = ? FOR UPDATE',
+      [bookingId]
+    );
+
+    if (bookingRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+
+    // Insert the charge
+    const [result] = await conn.query(
+      'INSERT INTO booking_charges (booking_id, description, amount, created_at) VALUES (?, ?, ?, NOW())',
+      [bookingId, description, parseFloat(amount)]
+    );
+
+    // Update booking total_amount
+    const currentTotal = parseFloat(bookingRows[0].total_amount) || 0;
+    const newTotal = currentTotal + parseFloat(amount);
+
+    await conn.query(
+      'UPDATE bookings SET total_amount = ?, updated_at = NOW() WHERE id = ?',
+      [newTotal, bookingId]
+    );
+
+    await conn.commit();
+
+    res.json({ 
+      success: true, 
+      message: 'Charge added successfully',
+      charge: {
+        id: result.insertId,
+        booking_id: bookingId,
+        description,
+        amount: parseFloat(amount)
+      }
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error('Failed to add charge:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+// Get charges for a booking
+router.get('/:id/charges', async (req, res) => {
+  try {
+    const pool = getPool();
+    const bookingId = req.params.id;
+
+    const [charges] = await pool.query(
+      'SELECT * FROM booking_charges WHERE booking_id = ? ORDER BY created_at DESC',
+      [bookingId]
+    );
+
+    res.json({ success: true, charges });
+  } catch (err) {
+    console.error('Failed to fetch charges:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get comprehensive booking summary with charges, payments, and invoice
+router.get('/:id/summary', async (req, res) => {
+  try {
+    const pool = getPool();
+    const bookingId = req.params.id;
+
+    // Get booking details with customer and room info
+    const [bookingRows] = await pool.query(`
+      SELECT 
+        b.*, 
+        c.first_name, 
+        c.last_name, 
+        c.email, 
+        c.phone, 
+        c.address,
+        r.room_number, 
+        r.room_type,
+        r.capacity,
+        i.id as invoice_id,
+        i.invoice_number,
+        i.preview_url as invoice_preview_url,
+        i.file_url as invoice_file_url
+      FROM bookings b
+      LEFT JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN rooms r ON b.room_id = r.id
+      LEFT JOIN invoices i ON b.invoice_id = i.id
+      WHERE b.id = ?
+    `, [bookingId]);
+
+    if (bookingRows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+
+    const booking = bookingRows[0];
+
+    // Get all charges for this booking
+    const [charges] = await pool.query(
+      'SELECT * FROM booking_charges WHERE booking_id = ? ORDER BY created_at DESC',
+      [bookingId]
+    );
+
+    // Get all payments for this booking
+    const [payments] = await pool.query(
+      'SELECT * FROM payments WHERE booking_id = ? ORDER BY processed_at DESC',
+      [bookingId]
+    );
+
+    // Calculate totals
+    const baseAmount = parseFloat(booking.base_amount || booking.total_amount || 0);
+    const discountAmount = parseFloat(booking.discount_amount || 0);
+    const roomTotal = baseAmount - discountAmount;
+    
+    const additionalCharges = charges.reduce((sum, charge) => {
+      const qty = charge.quantity || 1;
+      const unitAmount = parseFloat(charge.unit_amount || charge.amount || 0);
+      return sum + (qty * unitAmount);
+    }, 0);
+
+    const subtotal = roomTotal + additionalCharges;
+    const vat = subtotal * 0.0; // 0% VAT for now, can be configured
+    const grandTotal = subtotal + vat;
+
+    const totalPaid = payments.reduce((sum, payment) => {
+      return sum + parseFloat(payment.amount || 0);
+    }, 0);
+
+    const balance = grandTotal - totalPaid;
+
+    res.json({
+      success: true,
+      summary: {
+        booking: {
+          id: booking.id,
+          bookingRef: booking.booking_reference,
+          guestName: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+          guestEmail: booking.email,
+          guestPhone: booking.phone,
+          guestAddress: booking.address,
+          roomNumber: booking.room_number,
+          roomType: booking.room_type,
+          capacity: booking.capacity,
+          checkInDate: booking.checkin_date,
+          checkOutDate: booking.checkout_date,
+          status: booking.status,
+          createdAt: booking.created_at
+        },
+        charges: charges.map(charge => ({
+          id: charge.id,
+          description: charge.description,
+          quantity: charge.quantity || 1,
+          unitAmount: parseFloat(charge.unit_amount || charge.amount || 0),
+          totalAmount: (charge.quantity || 1) * parseFloat(charge.unit_amount || charge.amount || 0),
+          createdAt: charge.created_at,
+          createdBy: charge.created_by
+        })),
+        payments: payments.map(payment => ({
+          id: payment.id,
+          amount: parseFloat(payment.amount),
+          method: payment.method || payment.gateway || 'CASH',
+          reference: payment.gateway_payment_id,
+          receivedBy: payment.received_by,
+          notes: payment.notes,
+          status: payment.status,
+          processedAt: payment.processed_at,
+          createdAt: payment.created_at
+        })),
+        totals: {
+          baseAmount,
+          discountAmount,
+          roomTotal,
+          additionalCharges,
+          subtotal,
+          vat,
+          grandTotal,
+          totalPaid,
+          balance
+        },
+        invoice: booking.invoice_number ? {
+          invoiceId: booking.invoice_id,
+          invoiceNumber: booking.invoice_number,
+          previewUrl: booking.invoice_preview_url,
+          fileUrl: booking.invoice_file_url
+        } : null
+      }
+    });
+  } catch (err) {
+    console.error('Failed to fetch booking summary:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

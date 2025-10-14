@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import bookingService from '../firebase/bookingService';
-import invoiceService from '../firebase/invoiceService'; // Import invoice service
+import invoiceService from '../firebase/invoiceService';
+import { previewInvoice } from '../utils/pdfGenerator';
 import '../booking.css';
 
 const Bookings = () => {
@@ -17,6 +18,14 @@ const Bookings = () => {
   const [bookingToDelete, setBookingToDelete] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [bookingToView, setBookingToView] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [paymentData, setPaymentData] = useState({
+    amount: '',
+    method: 'CASH',
+    reference: '',
+    notes: ''
+  });
   const [sortConfig, setSortConfig] = useState({ key: 'checkInDate', direction: 'descending' });
 
   // Load bookings on component mount
@@ -315,15 +324,301 @@ const Bookings = () => {
     return '';
   };
 
-  const handleViewBooking = (booking) => {
+  const handleViewBooking = async (booking) => {
     console.log('View booking clicked:', booking);
+    
+    // Show modal immediately with basic info
     setBookingToView(booking);
     setShowViewModal(true);
+    
+    try {
+      // Fetch comprehensive booking summary with charges, payments, and totals
+      const result = await api.getBookingSummary(booking.id);
+      
+      if (result.success) {
+        const { summary } = result;
+        
+        // Update modal with full details including charges, payments, and invoice info
+        setBookingToView({
+          ...booking,
+          ...summary.booking,
+          charges: summary.charges || [],
+          payments: summary.payments || [],
+          totals: summary.totals || {},
+          invoice: summary.invoice || null
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching booking summary:', error);
+    }
   };
 
   const handleCloseViewModal = () => {
     setShowViewModal(false);
     setBookingToView(null);
+  };
+
+  const handleAddPaymentClick = () => {
+    if (bookingToView) {
+      setShowViewModal(false);
+      setSelectedBooking(bookingToView);
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handleViewInvoice = async () => {
+    if (!bookingToView) return;
+    
+    try {
+      let invoiceData = null;
+      
+      // Check if invoice info is already loaded in the summary
+      if (bookingToView.invoice && bookingToView.invoice.invoiceId) {
+        // Fetch the full invoice data by numeric ID
+        console.log('🔍 Fetching invoice by ID:', bookingToView.invoice.invoiceId);
+        const invoiceResult = await api.getInvoiceById(bookingToView.invoice.invoiceId);
+        
+        if (invoiceResult.success && invoiceResult.invoice) {
+          invoiceData = invoiceResult.invoice;
+        }
+      } else {
+        // Otherwise, try to fetch invoice by booking ID
+        console.log('🔍 Fetching invoice by booking ID:', bookingToView.id);
+        const invoiceResult = await api.getInvoiceByBookingId(bookingToView.id);
+        
+        if (invoiceResult.success && invoiceResult.invoice) {
+          invoiceData = invoiceResult.invoice;
+        }
+      }
+      
+      if (invoiceData) {
+        // Transform the invoice data to match the format expected by previewInvoice
+        const transformedInvoice = transformInvoiceData(invoiceData);
+        console.log('✅ TRANSFORMED INVOICE FOR PDF:', transformedInvoice);
+        console.log('📋 Customer Info in transformed:', transformedInvoice.customerInfo);
+        console.log('🛏️ Items in transformed:', transformedInvoice.items);
+        // Open invoice in preview/print mode
+        previewInvoice(transformedInvoice);
+      } else {
+        // No invoice found
+        alert('No invoice found for this booking. Please create an invoice from the Create Invoice page.');
+      }
+    } catch (error) {
+      console.error('Error fetching invoice:', error);
+      alert('Error fetching invoice. Please try again.');
+    }
+  };
+
+  // Transform invoice data from API to match PDF generator format
+  const transformInvoiceData = (invoice) => {
+    console.log('🔍 RAW INVOICE DATA:', invoice); // Enhanced debug log
+    console.log('📋 Customer Info:', {
+      first_name: invoice.first_name,
+      last_name: invoice.last_name,
+      email: invoice.email,
+      phone: invoice.phone,
+      nid: invoice.nid,
+      address: invoice.address
+    });
+    console.log('📅 Date Info:', {
+      checkin_date: invoice.checkin_date,
+      checkout_date: invoice.checkout_date
+    });
+    console.log('🏠 Room Info:', {
+      room_number: invoice.room_number,
+      room_type: invoice.room_type
+    });
+    
+    // Calculate nights if we have check-in and check-out dates
+    let totalNights = 1;
+    if (invoice.checkin_date && invoice.checkout_date) {
+      const checkIn = new Date(invoice.checkin_date);
+      const checkOut = new Date(invoice.checkout_date);
+      totalNights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+    }
+
+    // Calculate per night cost
+    const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || invoice.total || 0);
+    const discountAmount = parseFloat(invoice.discount_amount || 0);
+    const roomTotal = baseAmount - discountAmount;
+    const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
+
+    // Calculate additional charges total
+    const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
+      sum + parseFloat(c.amount || 0), 0
+    );
+
+    return {
+      id: invoice.invoice_number || `INV-${invoice.id}`,
+      invoiceDate: invoice.invoice_date || invoice.issued_at || invoice.created_at,
+      dueDate: invoice.due_date || invoice.due_at,
+      customerInfo: {
+        name: invoice.customer_name || 
+              `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 
+              'Guest',
+        email: invoice.customer_email || invoice.email || '',
+        phone: invoice.customer_phone || invoice.phone || '',
+        nid: invoice.customer_nid || invoice.nid || '',
+        address: invoice.customer_address || invoice.address || ''
+      },
+      items: invoice.items && invoice.items.length > 0 ? 
+        invoice.items.map(item => ({
+          roomNumber: item.room_number || invoice.room_number || 'N/A',
+          checkInDate: item.check_in_date || invoice.checkin_date,
+          checkOutDate: item.check_out_date || invoice.checkout_date,
+          totalNights: item.total_nights || totalNights,
+          guestCount: item.guest_count || invoice.capacity || 1,
+          perNightCost: parseFloat(item.price_per_night || item.unit_price || perNightCost || 0),
+          amount: parseFloat(item.amount || item.line_total || roomTotal || 0)
+        })) : 
+        [{
+          roomNumber: invoice.room_number || 'N/A',
+          checkInDate: invoice.checkin_date,
+          checkOutDate: invoice.checkout_date,
+          totalNights: totalNights,
+          guestCount: invoice.capacity || 1,
+          perNightCost: perNightCost,
+          amount: roomTotal
+        }],
+      additionalCharges: (invoice.charges || []).map(charge => ({
+        description: charge.description,
+        amount: parseFloat(charge.amount || 0)
+      })),
+      originalSubtotal: baseAmount,
+      totalDiscount: discountAmount,
+      subtotal: roomTotal,
+      additionalChargesTotal: additionalChargesTotal,
+      tax: parseFloat(invoice.tax_amount || 0),
+      total: parseFloat(invoice.total || baseAmount + additionalChargesTotal),
+      paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
+      balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
+      notes: invoice.notes || '',
+      terms: invoice.terms || 'Payment due upon receipt.',
+      payments: (invoice.payments || []).map(payment => ({
+        amount: parseFloat(payment.amount || 0),
+        method: payment.method || payment.gateway || 'CASH',
+        reference: payment.gateway_payment_id || '',
+        date: payment.payment_date || payment.processed_at || payment.created_at
+      }))
+    };
+  };
+
+  const createInvoiceForBooking = async (booking) => {
+    try {
+      // Fetch full booking details
+      const result = await api.getBookingById(booking.id);
+      
+      if (!result.success) {
+        alert('Error fetching booking details');
+        return;
+      }
+      
+      const fullBooking = result.booking;
+      
+      // Calculate nights
+      const checkIn = new Date(fullBooking.checkin_date || fullBooking.checkInDate);
+      const checkOut = new Date(fullBooking.checkout_date || fullBooking.checkOutDate);
+      const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+      
+      // Calculate amounts
+      const baseAmount = parseFloat(fullBooking.base_amount || fullBooking.total_amount || 0);
+      const discountPercent = parseFloat(fullBooking.discount_percentage || 0);
+      const discountAmount = (baseAmount * discountPercent) / 100;
+      const afterDiscount = baseAmount - discountAmount;
+      
+      // Get additional charges
+      const charges = fullBooking.charges || [];
+      const additionalTotal = charges.reduce((sum, c) => sum + parseFloat(c.amount || 0), 0);
+      
+      const total = afterDiscount + additionalTotal;
+      
+      // Create invoice
+      const invoiceData = {
+        booking_id: booking.id,
+        customer_name: `${fullBooking.first_name} ${fullBooking.last_name}`,
+        customer_email: fullBooking.email,
+        customer_phone: fullBooking.phone,
+        customer_address: fullBooking.address || '',
+        customer_nid: fullBooking.id_number || '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        items: [{
+          room_number: fullBooking.room_number,
+          room_type: fullBooking.room_type,
+          check_in_date: fullBooking.checkin_date,
+          check_out_date: fullBooking.checkout_date,
+          total_nights: nights,
+          guest_count: fullBooking.capacity || 1,
+          price_per_night: baseAmount / nights,
+          base_amount: baseAmount,
+          discount_percentage: discountPercent,
+          discount_amount: discountAmount,
+          amount: afterDiscount
+        }],
+        notes: fullBooking.notes || '',
+        terms: 'Payment due upon receipt.',
+        created_by: 'system'
+      };
+      
+      const createResult = await api.createInvoice(invoiceData);
+      
+      if (createResult.success) {
+        alert('Invoice created successfully!');
+        window.location.href = `/invoices?id=${createResult.invoice.id}`;
+      } else {
+        alert('Error creating invoice: ' + (createResult.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error creating invoice:', error);
+      alert('Error creating invoice. Please try again.');
+    }
+  };
+
+  const handlePaymentSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedBooking) return;
+    
+    try {
+      const paymentPayload = {
+        booking_id: selectedBooking.id,
+        amount: parseFloat(paymentData.amount),
+        method: paymentData.method,
+        gateway_payment_id: paymentData.reference || null,
+        notes: paymentData.notes || null,
+        processed_at: new Date().toISOString()
+      };
+      
+      const result = await api.addPayment(paymentPayload);
+      
+      if (result.success) {
+        alert('Payment added successfully!');
+        setShowPaymentModal(false);
+        setPaymentData({
+          amount: '',
+          method: 'CASH',
+          reference: '',
+          notes: ''
+        });
+        setSelectedBooking(null);
+        loadBookings(); // Reload bookings to update payment status
+      } else {
+        alert('Error adding payment: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error adding payment:', error);
+      alert('Error adding payment. Please try again.');
+    }
+  };
+
+  const handleClosePaymentModal = () => {
+    setShowPaymentModal(false);
+    setPaymentData({
+      amount: '',
+      method: 'CASH',
+      reference: '',
+      notes: ''
+    });
+    setSelectedBooking(null);
   };
 
   const handleGenerateInvoice = (booking) => {
@@ -333,6 +628,9 @@ const Bookings = () => {
   };
 
   const getStatusBadge = (status) => {
+    // Handle undefined or null status
+    const safeStatus = (status || 'pending').toLowerCase();
+    
     const statusConfig = {
       pending: { color: 'orange', icon: Clock },
       confirmed: { color: 'blue', icon: CheckCircle },
@@ -342,13 +640,13 @@ const Bookings = () => {
       cancelled: { color: 'red', icon: XCircle }
     };
     
-    const config = statusConfig[status] || { color: 'gray', icon: Clock };
+    const config = statusConfig[safeStatus] || { color: 'gray', icon: Clock };
     const Icon = config.icon;
     
     return (
       <span className={`status-badge status-${config.color}`}>
         <Icon size={14} />
-        {status.replace('-', ' ').toUpperCase()}
+        {safeStatus.replace('-', ' ').toUpperCase()}
       </span>
     );
   };
@@ -639,20 +937,231 @@ const Bookings = () => {
                 <div className="detail-item"><span>Booked On:</span> {new Date(bookingToView.createdAt).toLocaleString()}</div>
                 <div className="detail-item"><span>Booked By:</span> {bookingToView.createdBy}</div>
               </div>
+
+              {/* Additional Charges Section */}
+              {bookingToView.charges && bookingToView.charges.length > 0 && (
+                <div className="charges-section">
+                  <h4>Additional Charges:</h4>
+                  <div className="charges-list">
+                    {bookingToView.charges.map((charge, index) => (
+                      <div key={index} className="charge-item">
+                        <div className="charge-desc">
+                          <span className="charge-name">{charge.description}</span>
+                          <span className="charge-date">
+                            {new Date(charge.created_at).toLocaleDateString()} at {new Date(charge.created_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="charge-amount">৳{parseFloat(charge.amount).toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Payment History Section */}
+              {bookingToView.payments && bookingToView.payments.length > 0 && (
+                <div className="payments-section">
+                  <h4 className="payments-list-header">Payment History:</h4>
+                  <div className="payments-list">
+                    {bookingToView.payments.map((payment, index) => (
+                      <div key={index} className="payment-item">
+                        <div className="payment-desc">
+                          <span className="payment-method">{(payment.method || 'CASH').toUpperCase()}</span>
+                          <span className="payment-date">
+                            Paid: {new Date(payment.processedAt || payment.createdAt).toLocaleDateString()} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString()}
+                          </span>
+                          {payment.reference && (
+                            <span className="payment-reference">Ref: {payment.reference}</span>
+                          )}
+                          {payment.receivedBy && (
+                            <span className="payment-received">By: {payment.receivedBy}</span>
+                          )}
+                        </div>
+                        <div className="payment-amount">৳{parseFloat(payment.amount).toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Financial Totals Summary */}
+              {bookingToView.totals && (
+                <div className="financial-summary-card">
+                  <div className="financial-header">
+                    <h4>💰 Financial Summary</h4>
+                  </div>
+                  <div className="financial-body">
+                    {/* Breakdown Section */}
+                    <div className="breakdown-section">
+                      <div className="breakdown-item">
+                        <div className="breakdown-label">
+                          <span className="breakdown-icon">🛏️</span>
+                          <span>Room Charges</span>
+                        </div>
+                        <div className="breakdown-value">৳{bookingToView.totals.roomTotal?.toFixed(2)}</div>
+                      </div>
+                      
+                      {bookingToView.totals.additionalCharges > 0 && (
+                        <div className="breakdown-item">
+                          <div className="breakdown-label">
+                            <span className="breakdown-icon">➕</span>
+                            <span>Additional Charges</span>
+                          </div>
+                          <div className="breakdown-value additional">৳{bookingToView.totals.additionalCharges?.toFixed(2)}</div>
+                        </div>
+                      )}
+                      
+                      <div className="breakdown-divider"></div>
+                      
+                      <div className="breakdown-item subtotal-row">
+                        <div className="breakdown-label">
+                          <span>Subtotal</span>
+                        </div>
+                        <div className="breakdown-value">৳{bookingToView.totals.subtotal?.toFixed(2)}</div>
+                      </div>
+                      
+                      {bookingToView.totals.vat > 0 && (
+                        <div className="breakdown-item">
+                          <div className="breakdown-label">
+                            <span className="breakdown-icon">📊</span>
+                            <span>VAT</span>
+                          </div>
+                          <div className="breakdown-value">৳{bookingToView.totals.vat?.toFixed(2)}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grand Total */}
+                    <div className="grand-total-row">
+                      <div className="grand-total-label">Grand Total</div>
+                      <div className="grand-total-amount">৳{bookingToView.totals.grandTotal?.toFixed(2)}</div>
+                    </div>
+
+                    {/* Payment Status Section */}
+                    <div className="payment-status-section">
+                      <div className="payment-status-item paid">
+                        <div className="status-icon">✓</div>
+                        <div className="status-content">
+                          <div className="status-label">Total Paid</div>
+                          <div className="status-amount">৳{bookingToView.totals.totalPaid?.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      
+                      <div className={`payment-status-item balance ${bookingToView.totals.balance > 0 ? 'due' : 'clear'}`}>
+                        <div className="status-icon">{bookingToView.totals.balance > 0 ? '⚠' : '✓'}</div>
+                        <div className="status-content">
+                          <div className="status-label">Balance Due</div>
+                          <div className="status-amount">৳{bookingToView.totals.balance?.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={handleCloseViewModal}>
                 Close
               </button>
-              {canPerformAction('generate_invoice') && bookingToView.paymentStatus === 'paid' && (
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => handleGenerateInvoice(bookingToView)}
-                >
-                  <Calendar size={20} />
-                  Generate Invoice
-                </button>
-              )}
+              <button className="btn btn-info" onClick={handleAddPaymentClick}>
+                <CreditCard size={20} />
+                Add Payment
+              </button>
+              <button className="btn btn-success" onClick={handleViewInvoice}>
+                <Eye size={20} />
+                View Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedBooking && (
+        <div className="modal-overlay" onClick={handleClosePaymentModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Payment</h2>
+              <button className="close-btn" onClick={handleClosePaymentModal}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="booking-summary">
+                <h4>Booking Details</h4>
+                <p><strong>Guest:</strong> {selectedBooking.guestName}</p>
+                <p><strong>Room:</strong> {selectedBooking.roomNumber} - {selectedBooking.roomType}</p>
+                <p><strong>Total Amount:</strong> ৳{selectedBooking.total?.toFixed(2)}</p>
+                <p><strong>Paid:</strong> ৳{selectedBooking.paidAmount?.toFixed(2)}</p>
+                <p><strong>Due:</strong> ৳{selectedBooking.dueBalance?.toFixed(2)}</p>
+              </div>
+              
+              <form onSubmit={handlePaymentSubmit} className="payment-form">
+                <div className="form-group">
+                  <label htmlFor="amount">Amount *</label>
+                  <input
+                    type="number"
+                    id="amount"
+                    step="0.01"
+                    min="0.01"
+                    max={selectedBooking.dueBalance}
+                    value={paymentData.amount}
+                    onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+                    required
+                    placeholder="Enter payment amount"
+                  />
+                  <small>Maximum: ৳{selectedBooking.dueBalance?.toFixed(2)}</small>
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="method">Payment Method *</label>
+                  <select
+                    id="method"
+                    value={paymentData.method}
+                    onChange={(e) => setPaymentData({ ...paymentData, method: e.target.value })}
+                    required
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Card</option>
+                    <option value="BKASH">bKash</option>
+                    <option value="NAGAD">Nagad</option>
+                    <option value="ROCKET">Rocket</option>
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="reference">Transaction Reference</label>
+                  <input
+                    type="text"
+                    id="reference"
+                    value={paymentData.reference}
+                    onChange={(e) => setPaymentData({ ...paymentData, reference: e.target.value })}
+                    placeholder="Transaction ID, Check number, etc."
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="notes">Notes</label>
+                  <textarea
+                    id="notes"
+                    rows="3"
+                    value={paymentData.notes}
+                    onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })}
+                    placeholder="Additional notes..."
+                  />
+                </div>
+                
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={handleClosePaymentModal}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    <CreditCard size={20} />
+                    Add Payment
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

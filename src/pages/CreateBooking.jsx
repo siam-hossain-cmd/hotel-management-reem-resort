@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Users, Bed, CreditCard, Check, X, Search, Filter, Save, Send, Plus, Trash2, Eye, Download, Printer } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { bookingService } from '../firebase/bookingService';
-import { invoiceService } from '../firebase/invoiceService';
+import { api } from '../services/api';
 import { generateInvoicePDF, previewInvoice, printInvoicePDF } from '../utils/pdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import '../booking.css';
@@ -350,14 +350,35 @@ const CreateBooking = () => {
         throw new Error(bookingResult.error || 'Failed to create booking document.');
       }
 
-      // 2. Create the invoice, linking it to the booking
-      const invoiceToSave = {
-        ...invoice,
-        bookingId: bookingResult.id, // Link invoice to booking
-        bookingRef: bookingResult.bookingReference, // Use reference from created booking
+      // 2. Create the invoice in MySQL, linking it to the booking
+      const invoiceData = {
+        booking_id: bookingResult.id,
+        customer_name: `${guestInfo.firstName} ${guestInfo.lastName}`.trim(),
+        customer_email: guestInfo.email,
+        customer_phone: guestInfo.phone,
+        customer_address: guestInfo.address,
+        customer_nid: guestInfo.idNumber,
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: searchCriteria.checkOutDate,
+        items: invoice.items.map(item => ({
+          room_number: item.roomNumber || selectedRoom.roomNumber,
+          room_type: item.roomType || selectedRoom.roomType,
+          check_in_date: item.checkInDate || searchCriteria.checkInDate,
+          check_out_date: item.checkOutDate || searchCriteria.checkOutDate,
+          total_nights: item.totalNights || bookingSummary.totalNights,
+          guest_count: item.guestCount || searchCriteria.guestCount,
+          price_per_night: item.perNightCost || selectedRoom.pricePerNight,
+          base_amount: item.totalNights * item.perNightCost,
+          discount_percentage: item.discountPercentage || 0,
+          discount_amount: item.discountAmount || 0,
+          amount: item.amount
+        })),
+        notes: guestInfo.specialRequests || invoice.notes || '',
+        terms: invoice.terms || 'Payment is due within 30 days',
+        created_by: user?.name || user?.email || 'Unknown'
       };
       
-      const invoiceResult = await invoiceService.createInvoice(invoiceToSave);
+      const invoiceResult = await api.createInvoice(invoiceData);
 
       if (invoiceResult.success) {
         alert('Booking and Invoice created successfully!');

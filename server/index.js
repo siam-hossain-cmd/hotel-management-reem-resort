@@ -11,6 +11,7 @@ import bookingsRouter from './routes/bookings.js';
 import invoicesRouter from './routes/invoices.js';
 import customersRouter from './routes/customers.js';
 import migrateRouter from './routes/migrate.js';
+import paymentsRouter from './routes/payments.js';
 
 // Initialize Firebase Admin
 if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -44,13 +45,14 @@ app.use(bodyParser.json());
 app.get('/_health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Public routes
-app.use('/rooms', roomsRouter);
-app.use('/migrate', migrateRouter);
+app.use('/api/rooms', roomsRouter);
+app.use('/api/migrate', migrateRouter);
 
 // Temporarily make bookings, customers, and invoices public for development - TODO: Re-enable auth in production
-app.use('/bookings', bookingsRouter);
-app.use('/customers', customersRouter);
-app.use('/invoices', invoicesRouter);
+app.use('/api/bookings', bookingsRouter);
+app.use('/api/customers', customersRouter);
+app.use('/api/invoices', invoicesRouter);
+app.use('/api/payments', paymentsRouter);
 
 // Protected routes - require token verification (currently none)
 

@@ -52,6 +52,10 @@ export const api = {
     const response = await fetch(`${API_BASE}/bookings`);
     return response.json();
   },
+  getBookingById: async (id) => {
+    const response = await fetch(`${API_BASE}/bookings/${id}`);
+    return response.json();
+  },
   createBooking: async (bookingData) => {
     const res = await fetch(`${API_BASE}/bookings`, {
       method: 'POST',
@@ -79,6 +83,40 @@ export const api = {
       },
       body: JSON.stringify(statusPayload)
     });
+    return response.json();
+  },
+  addBookingCharge: async (bookingId, chargeData) => {
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/charges`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      },
+      body: JSON.stringify(chargeData)
+    });
+    return response.json();
+  },
+  getBookingCharges: async (bookingId) => {
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/charges`);
+    return response.json();
+  },
+  getBookingSummary: async (bookingId) => {
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/summary`);
+    return response.json();
+  },
+  addPayment: async (paymentData) => {
+    const response = await fetch(`${API_BASE}/payments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      },
+      body: JSON.stringify(paymentData)
+    });
+    return response.json();
+  },
+  getPaymentsByBookingId: async (bookingId) => {
+    const response = await fetch(`${API_BASE}/payments/booking/${bookingId}`);
     return response.json();
   },
 
@@ -117,6 +155,10 @@ export const api = {
   },
   getInvoiceById: async (id) => {
     const res = await fetch(`${API_BASE}/invoices/${id}`);
+    return res.json();
+  },
+  getInvoiceByBookingId: async (bookingId) => {
+    const res = await fetch(`${API_BASE}/invoices/booking/${bookingId}`);
     return res.json();
   }
 };
