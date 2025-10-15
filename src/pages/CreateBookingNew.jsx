@@ -285,7 +285,24 @@ const CreateBooking = () => {
     }
   };
 
-  const handleViewInvoice = () => {
+  const handleViewInvoice = async () => {
+    // Use real invoice data if available from API
+    if (bookingResult?.booking_id) {
+      try {
+        // Fetch the latest invoice data with payments
+        const invoiceRes = await api.getInvoiceByBookingId(bookingResult.booking_id);
+        if (invoiceRes.success && invoiceRes.invoice) {
+          const transformedInvoice = transformInvoiceData(invoiceRes.invoice);
+          console.log('📄 REAL INVOICE DATA FOR PREVIEW:', transformedInvoice);
+          previewInvoice(transformedInvoice);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to fetch invoice:', error);
+      }
+    }
+    
+    // Fallback to mock data if API fails
     const mockInvoiceData = createMockInvoiceData();
     if (mockInvoiceData) {
       previewInvoice(mockInvoiceData);
@@ -294,7 +311,24 @@ const CreateBooking = () => {
     }
   };
 
-  const handleDownloadInvoice = () => {
+  const handleDownloadInvoice = async () => {
+    // Use real invoice data if available from API
+    if (bookingResult?.booking_id) {
+      try {
+        // Fetch the latest invoice data with payments
+        const invoiceRes = await api.getInvoiceByBookingId(bookingResult.booking_id);
+        if (invoiceRes.success && invoiceRes.invoice) {
+          const transformedInvoice = transformInvoiceData(invoiceRes.invoice);
+          console.log('📄 REAL INVOICE DATA FOR DOWNLOAD:', transformedInvoice);
+          generateInvoicePDF(transformedInvoice);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to fetch invoice:', error);
+      }
+    }
+    
+    // Fallback to mock data if API fails
     const mockInvoiceData = createMockInvoiceData();
     if (mockInvoiceData) {
       generateInvoicePDF(mockInvoiceData);
@@ -303,10 +337,99 @@ const CreateBooking = () => {
     }
   };
 
+  // Transform invoice data from API to match PDF generator format
+  const transformInvoiceData = (invoice) => {
+    console.log('🔍 TRANSFORMING INVOICE:', invoice);
+    
+    // Calculate nights if we have check-in and check-out dates
+    let totalNights = 1;
+    if (invoice.checkin_date && invoice.checkout_date) {
+      const checkIn = new Date(invoice.checkin_date);
+      const checkOut = new Date(invoice.checkout_date);
+      totalNights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+    }
+
+    // Calculate per night cost
+    const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || invoice.total || 0);
+    const discountAmount = parseFloat(invoice.discount_amount || 0);
+    const roomTotal = baseAmount - discountAmount;
+    const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
+
+    // Calculate additional charges total
+    const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
+      sum + parseFloat(c.amount || 0), 0
+    );
+
+    return {
+      id: invoice.invoice_number || `INV-${invoice.id}`,
+      invoiceDate: invoice.invoice_date || invoice.issued_at || invoice.created_at,
+      dueDate: invoice.due_date || invoice.due_at,
+      customerInfo: {
+        name: invoice.customer_name || 
+              `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 
+              'Guest',
+        email: invoice.customer_email || invoice.email || '',
+        phone: invoice.customer_phone || invoice.phone || '',
+        nid: invoice.customer_nid || invoice.nid || '',
+        address: invoice.customer_address || invoice.address || ''
+      },
+      items: invoice.items && invoice.items.length > 0 ? 
+        invoice.items.map(item => ({
+          roomNumber: item.room_number || invoice.room_number || 'N/A',
+          checkInDate: item.check_in_date || invoice.checkin_date,
+          checkOutDate: item.check_out_date || invoice.checkout_date,
+          totalNights: item.total_nights || totalNights,
+          guestCount: item.guest_count || invoice.capacity || 1,
+          perNightCost: parseFloat(item.price_per_night || item.unit_price || perNightCost || 0),
+          amount: parseFloat(item.amount || item.line_total || roomTotal || 0)
+        })) : 
+        [{
+          roomNumber: invoice.room_number || 'N/A',
+          checkInDate: invoice.checkin_date,
+          checkOutDate: invoice.checkout_date,
+          totalNights: totalNights,
+          guestCount: invoice.capacity || 1,
+          perNightCost: perNightCost,
+          amount: roomTotal
+        }],
+      additionalCharges: (invoice.charges || []).map(charge => ({
+        description: charge.description,
+        amount: parseFloat(charge.amount || 0)
+      })),
+      originalSubtotal: baseAmount,
+      totalDiscount: discountAmount,
+      subtotal: roomTotal,
+      additionalChargesTotal: additionalChargesTotal,
+      tax: parseFloat(invoice.tax_amount || 0),
+      total: parseFloat(invoice.total || baseAmount + additionalChargesTotal),
+      // Calculate total paid from payments array if not provided
+      paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
+      balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
+      // Add aliases for PDF template compatibility
+      totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
+      notes: invoice.notes || '',
+      terms: invoice.terms || 'Payment due upon receipt.',
+      payments: (invoice.payments || []).map(payment => {
+        console.log('🔍 RAW PAYMENT DATA:', payment);
+        return {
+          amount: parseFloat(payment.amount || 0),
+          method: payment.method || payment.gateway || 'CASH',
+          description: payment.reference || payment.gateway_payment_id || payment.notes || 'Payment',
+          date: payment.payment_date || payment.processed_at || payment.created_at
+        };
+      })
+    };
+  };
+
   const createMockInvoiceData = () => {
     if (!bookingDetails.selectedRoom || !guestInfo.first_name) {
       return null;
     }
+
+    const totalPaid = getTotalPaid();
+    const finalTotal = bookingDetails.final_amount || bookingDetails.total_amount;
+    const dueAmount = Math.max(0, finalTotal - totalPaid);
 
     return {
       id: 'PREVIEW-' + Date.now(),
@@ -338,8 +461,19 @@ const CreateBooking = () => {
       subtotal: (bookingDetails.total_amount || 0) - (bookingDetails.discount_amount || 0),
       taxRate: vatRate,
       taxAmount: bookingDetails.vat_amount || 0,
-      total: bookingDetails.final_amount || bookingDetails.total_amount,
-      paymentStatus: getTotalPaid() >= (bookingDetails.final_amount || bookingDetails.total_amount) ? 'paid' : 'pending',
+      total: finalTotal,
+      // Add payment information
+      totalPaid: totalPaid,
+      paidAmount: totalPaid,
+      dueAmount: dueAmount,
+      balanceDue: dueAmount,
+      payments: payments.map(payment => ({
+        amount: parseFloat(payment.amount || 0),
+        method: payment.method || 'cash',
+        description: payment.notes || 'Payment',
+        date: new Date().toISOString()
+      })),
+      paymentStatus: totalPaid >= finalTotal ? 'paid' : (totalPaid > 0 ? 'partial' : 'pending'),
       notes: `Check-in: ${bookingDetails.checkin_date}, Check-out: ${bookingDetails.checkout_date}`,
       additionalCharges: [],
       additionalTotal: 0

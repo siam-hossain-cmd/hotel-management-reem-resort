@@ -138,10 +138,14 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     
     // Get invoice with booking and customer details - Select all columns explicitly
+    // 💰 RECALCULATE paid/due amounts based on actual payments
     const [invoices] = await pool.query(
       `SELECT 
               i.id, i.invoice_number, i.booking_id, i.customer_id, i.issued_at, i.due_at,
-              i.total, i.paid, i.due, i.currency, i.status, i.paid_at, i.meta,
+              i.total,
+              COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
+              i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+              i.currency, i.status, i.paid_at, i.meta,
               i.snapshot_json, i.file_url, i.preview_url, i.created_at,
               b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
               b.discount_amount, b.total_amount as booking_total,
@@ -252,8 +256,27 @@ router.get('/booking/:booking_id', async (req, res) => {
     const { booking_id } = req.params;
     
     // Get latest invoice for this booking
+    // Try to get existing invoice for this booking WITH FULL JOIN DATA
+    // 💰 RECALCULATE paid/due amounts based on actual payments
     let [invoices] = await conn.query(
-      'SELECT * FROM invoices WHERE booking_id = ? ORDER BY created_at DESC LIMIT 1',
+      `SELECT 
+        i.id, i.invoice_number, i.booking_id, i.customer_id, i.issued_at, i.due_at,
+        i.total, 
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
+        i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+        i.currency, i.status, i.paid_at, i.meta,
+        i.snapshot_json, i.file_url, i.preview_url, i.created_at,
+        b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
+        b.discount_amount, b.total_amount as booking_total,
+        c.first_name, c.last_name, c.email, c.phone, c.address, c.nid,
+        r.room_number, r.room_type, r.capacity, r.rate
+       FROM invoices i
+       LEFT JOIN bookings b ON i.booking_id = b.id
+       LEFT JOIN customers c ON b.customer_id = c.id
+       LEFT JOIN rooms r ON b.room_id = r.id
+       WHERE i.booking_id = ? 
+       ORDER BY i.created_at DESC 
+       LIMIT 1`,
       [booking_id]
     );
     
@@ -267,9 +290,11 @@ router.get('/booking/:booking_id', async (req, res) => {
         // Get booking details
         const [bookings] = await conn.query(
           `SELECT b.*, c.first_name, c.last_name, c.email, c.phone, c.address, c.nid,
+                  r.room_number, r.room_type, r.rate,
                   (SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = b.id AND p.status = 'completed') as paid_amount
            FROM bookings b
            LEFT JOIN customers c ON b.customer_id = c.id
+           LEFT JOIN rooms r ON b.room_id = r.id
            WHERE b.id = ?`,
           [booking_id]
         );
@@ -353,9 +378,15 @@ router.get('/booking/:booking_id', async (req, res) => {
     
     // Get payments with dates
     const [payments] = await conn.query(
-      'SELECT id, booking_id, amount, gateway as method, gateway_payment_id as reference, status, processed_at as created_at FROM payments WHERE booking_id = ? ORDER BY processed_at DESC',
+      'SELECT id, booking_id, amount, gateway as method, gateway_payment_id as reference, gateway_payment_id as notes, status, processed_at as created_at FROM payments WHERE booking_id = ? ORDER BY processed_at DESC',
       [booking_id]
     );
+    
+    console.log('💰 PAYMENTS FETCHED FROM DB:', {
+      booking_id,
+      payment_count: payments.length,
+      payments: payments
+    });
     
     res.json({
       success: true,

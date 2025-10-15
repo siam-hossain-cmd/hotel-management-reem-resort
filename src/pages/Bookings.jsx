@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Eye, Edit, Trash2, Calendar, Users, CheckCircle, XCircle, Clock, CreditCard, AlertTriangle, X, LogIn, LogOut } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, Trash2, Calendar, Users, User, CheckCircle, XCircle, Clock, CreditCard, AlertTriangle, X, LogIn, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -335,8 +335,13 @@ const Bookings = () => {
       // Fetch comprehensive booking summary with charges, payments, and totals
       const result = await api.getBookingSummary(booking.id);
       
+      console.log('📊 BOOKING SUMMARY RESULT:', result);
+      
       if (result.success) {
         const { summary } = result;
+        
+        console.log('💰 PAYMENTS IN SUMMARY:', summary.payments);
+        console.log('📋 CHARGES IN SUMMARY:', summary.charges);
         
         // Update modal with full details including charges, payments, and invoice info
         setBookingToView({
@@ -347,6 +352,8 @@ const Bookings = () => {
           totals: summary.totals || {},
           invoice: summary.invoice || null
         });
+        
+        console.log('✅ BOOKING TO VIEW UPDATED WITH PAYMENTS');
       }
     } catch (error) {
       console.error('Error fetching booking summary:', error);
@@ -382,7 +389,7 @@ const Bookings = () => {
           invoiceData = invoiceResult.invoice;
         }
       } else {
-        // Otherwise, try to fetch invoice by booking ID
+        // Otherwise, try to fetch invoice by booking ID (auto-creates if missing)
         console.log('🔍 Fetching invoice by booking ID:', bookingToView.id);
         const invoiceResult = await api.getInvoiceByBookingId(bookingToView.id);
         
@@ -400,12 +407,34 @@ const Bookings = () => {
         // Open invoice in preview/print mode
         previewInvoice(transformedInvoice);
       } else {
-        // No invoice found
-        alert('No invoice found for this booking. Please create an invoice from the Create Invoice page.');
+        // No invoice found - offer to create one
+        const shouldCreate = confirm(
+          'No invoice found for this booking.\n\n' +
+          'Would you like to create an invoice now?\n\n' +
+          'Click OK to auto-generate invoice, or Cancel to go back.'
+        );
+        
+        if (shouldCreate) {
+          console.log('🆕 Creating invoice for booking:', bookingToView.id);
+          
+          // The backend auto-creates when fetching by booking_id
+          // So we just need to try again, and it should work
+          const retryResult = await api.getInvoiceByBookingId(bookingToView.id);
+          
+          if (retryResult.success && retryResult.invoice) {
+            const transformedInvoice = transformInvoiceData(retryResult.invoice);
+            previewInvoice(transformedInvoice);
+            
+            // Reload bookings to show the new invoice
+            await loadBookings();
+          } else {
+            alert('Failed to create invoice. Please check the console for errors.');
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching invoice:', error);
-      alert('Error fetching invoice. Please try again.');
+      alert('Error: ' + (error.message || 'Failed to fetch invoice. Please try again.'));
     }
   };
 
@@ -427,6 +456,13 @@ const Bookings = () => {
     console.log('🏠 Room Info:', {
       room_number: invoice.room_number,
       room_type: invoice.room_type
+    });
+    console.log('💰 Financial Info:', {
+      total: invoice.total,
+      paid: invoice.paid,
+      paid_amount: invoice.paid_amount,
+      due: invoice.due,
+      due_amount: invoice.due_amount
     });
     
     // Calculate nights if we have check-in and check-out dates
@@ -490,17 +526,27 @@ const Bookings = () => {
       additionalChargesTotal: additionalChargesTotal,
       tax: parseFloat(invoice.tax_amount || 0),
       total: parseFloat(invoice.total || baseAmount + additionalChargesTotal),
+      // Calculate total paid from payments array if not provided
       paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
       balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
+      // Add aliases for PDF template compatibility
+      totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
       notes: invoice.notes || '',
       terms: invoice.terms || 'Payment due upon receipt.',
-      payments: (invoice.payments || []).map(payment => ({
-        amount: parseFloat(payment.amount || 0),
-        method: payment.method || payment.gateway || 'CASH',
-        reference: payment.gateway_payment_id || '',
-        date: payment.payment_date || payment.processed_at || payment.created_at
-      }))
+      payments: (invoice.payments || []).map(payment => {
+        console.log('🔍 RAW PAYMENT DATA:', payment);
+        return {
+          amount: parseFloat(payment.amount || 0),
+          method: payment.method || payment.gateway || 'CASH',
+          description: payment.reference || payment.gateway_payment_id || payment.notes || 'Payment',
+          date: payment.payment_date || payment.processed_at || payment.created_at
+        };
+      })
     };
+    
+    console.log('💰 TRANSFORMED PAYMENTS:', result.payments);
+    return result;
   };
 
   const createInvoiceForBooking = async (booking) => {
@@ -913,145 +959,276 @@ const Bookings = () => {
       {/* View Booking Modal */}
       {showViewModal && bookingToView && (
         <div className="modal-overlay">
-          <div className="view-modal">
-            <div className="modal-header">
-              <h3>Booking Details</h3>
+          <div className="view-modal modern-booking-modal">
+            <div className="modal-header gradient-header">
+              <div className="header-content">
+                <div className="header-icon">
+                  <Calendar size={28} />
+                </div>
+                <div>
+                  <h3>Booking Details</h3>
+                  <p className="booking-ref-badge">{bookingToView.bookingRef}</p>
+                </div>
+              </div>
               <button className="close-btn" onClick={handleCloseViewModal}>
                 <X size={24} />
               </button>
             </div>
-            <div className="modal-body">
-              <div className="booking-details-grid">
-                <div className="detail-item"><span>Booking Ref:</span> <strong>{bookingToView.bookingRef}</strong></div>
-                <div className="detail-item"><span>Guest Name:</span> {bookingToView.guestName}</div>
-                <div className="detail-item"><span>Email:</span> {bookingToView.guestEmail}</div>
-                <div className="detail-item"><span>Phone:</span> {bookingToView.guestPhone}</div>
-                <div className="detail-item"><span>Room:</span> Room {bookingToView.roomNumber} ({bookingToView.roomType})</div>
-                <div className="detail-item"><span>Check-in:</span> {new Date(bookingToView.checkInDate).toLocaleDateString()}</div>
-                <div className="detail-item"><span>Check-out:</span> {new Date(bookingToView.checkOutDate).toLocaleDateString()}</div>
-                <div className="detail-item"><span>Nights:</span> {bookingToView.totalNights}</div>
-                <div className="detail-item"><span>Guests:</span> {bookingToView.guestCount}</div>
-                <div className="detail-item"><span>Total Amount:</span> ৳{bookingToView.total?.toFixed(2)}</div>
-                <div className="detail-item"><span>Booking Status:</span> {getStatusBadge(bookingToView.status)}</div>
-                <div className="detail-item"><span>Payment Status:</span> {getPaymentBadge(bookingToView.paymentStatus)}</div>
-                <div className="detail-item"><span>Booked On:</span> {new Date(bookingToView.createdAt).toLocaleString()}</div>
-                <div className="detail-item"><span>Booked By:</span> {bookingToView.createdBy}</div>
+            
+            <div className="modal-body scrollable-content">
+              {/* Guest Information Card */}
+              <div className="info-card guest-card">
+                <div className="card-header">
+                  <User size={20} />
+                  <h4>Guest Information</h4>
+                </div>
+                <div className="card-content">
+                  <div className="guest-info-grid">
+                    <div className="guest-info-item">
+                      <div className="guest-info-icon name">👤</div>
+                      <div className="guest-info-content">
+                        <span className="guest-info-label">Guest Name</span>
+                        <span className="guest-info-value">{bookingToView.guestName}</span>
+                      </div>
+                    </div>
+                    <div className="guest-info-item">
+                      <div className="guest-info-icon email">📧</div>
+                      <div className="guest-info-content">
+                        <span className="guest-info-label">Email</span>
+                        <span className="guest-info-value">{bookingToView.guestEmail}</span>
+                      </div>
+                    </div>
+                    <div className="guest-info-item">
+                      <div className="guest-info-icon phone">📱</div>
+                      <div className="guest-info-content">
+                        <span className="guest-info-label">Phone</span>
+                        <span className="guest-info-value">{bookingToView.guestPhone}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Booking Information Card */}
+              <div className="info-card booking-card">
+                <div className="card-header">
+                  <Calendar size={20} />
+                  <h4>Booking Information</h4>
+                </div>
+                <div className="card-content">
+                  {/* Dates Row */}
+                  <div className="dates-grid">
+                    <div className="date-box checkin">
+                      <div className="date-box-icon">📅</div>
+                      <div className="date-box-content">
+                        <span className="date-box-label">Check-in</span>
+                        <span className="date-box-date">{new Date(bookingToView.checkInDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span className="date-box-year">{new Date(bookingToView.checkInDate).getFullYear()}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="date-separator">
+                      <div className="separator-line"></div>
+                      <div className="nights-badge">{bookingToView.totalNights} {bookingToView.totalNights === 1 ? 'Night' : 'Nights'}</div>
+                    </div>
+                    
+                    <div className="date-box checkout">
+                      <div className="date-box-icon">📆</div>
+                      <div className="date-box-content">
+                        <span className="date-box-label">Check-out</span>
+                        <span className="date-box-date">{new Date(bookingToView.checkOutDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span className="date-box-year">{new Date(bookingToView.checkOutDate).getFullYear()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Room & Guests Info */}
+                  <div className="room-guests-grid">
+                    <div className="room-guest-box room">
+                      <div className="rgb-icon">🏠</div>
+                      <div className="rgb-content">
+                        <span className="rgb-label">Room</span>
+                        <span className="rgb-value">Room {bookingToView.roomNumber}</span>
+                        <span className="rgb-subtitle">{bookingToView.roomType}</span>
+                      </div>
+                    </div>
+                    <div className="room-guest-box guests">
+                      <div className="rgb-icon">👥</div>
+                      <div className="rgb-content">
+                        <span className="rgb-label">Guests</span>
+                        <span className="rgb-value">{bookingToView.guestCount} {bookingToView.guestCount === 1 ? 'Guest' : 'Guests'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Status Row */}
+                  <div className="status-grid">
+                    <div className="status-box-item">
+                      <span className="status-box-label">Booking Status</span>
+                      {getStatusBadge(bookingToView.status)}
+                    </div>
+                    <div className="status-box-item">
+                      <span className="status-box-label">Payment Status</span>
+                      {getPaymentBadge(bookingToView.paymentStatus)}
+                    </div>
+                  </div>
+                  
+                  {/* Footer Meta */}
+                  <div className="booking-footer-meta">
+                    <div className="footer-meta-item">
+                      <Clock size={14} />
+                      <span>Booked on {new Date(bookingToView.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="footer-meta-item">
+                      <User size={14} />
+                      <span>By {bookingToView.createdBy}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Additional Charges Section */}
               {bookingToView.charges && bookingToView.charges.length > 0 && (
-                <div className="charges-section">
-                  <h4>Additional Charges:</h4>
-                  <div className="charges-list">
-                    {bookingToView.charges.map((charge, index) => (
-                      <div key={index} className="charge-item">
-                        <div className="charge-desc">
-                          <span className="charge-name">{charge.description}</span>
-                          <span className="charge-date">
-                            {new Date(charge.created_at).toLocaleDateString()} at {new Date(charge.created_at).toLocaleTimeString()}
-                          </span>
+                <div className="info-card charges-card">
+                  <div className="card-header">
+                    <span className="header-icon">➕</span>
+                    <h4>Additional Charges</h4>
+                  </div>
+                  <div className="card-content">
+                    <div className="charges-list">
+                      {bookingToView.charges.map((charge, index) => (
+                        <div key={index} className="charge-item modern">
+                          <div className="charge-info">
+                            <span className="charge-name">{charge.description}</span>
+                            <span className="charge-date">
+                              <Clock size={12} />
+                              {new Date(charge.created_at).toLocaleDateString()} at {new Date(charge.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </span>
+                          </div>
+                          <div className="charge-amount">৳{parseFloat(charge.amount).toFixed(2)}</div>
                         </div>
-                        <div className="charge-amount">৳{parseFloat(charge.amount).toFixed(2)}</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Payment History Section */}
               {bookingToView.payments && bookingToView.payments.length > 0 && (
-                <div className="payments-section">
-                  <h4 className="payments-list-header">Payment History:</h4>
-                  <div className="payments-list">
-                    {bookingToView.payments.map((payment, index) => (
-                      <div key={index} className="payment-item">
-                        <div className="payment-desc">
-                          <span className="payment-method">{(payment.method || 'CASH').toUpperCase()}</span>
-                          <span className="payment-date">
-                            Paid: {new Date(payment.processedAt || payment.createdAt).toLocaleDateString()} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString()}
-                          </span>
-                          {payment.reference && (
-                            <span className="payment-reference">Ref: {payment.reference}</span>
-                          )}
-                          {payment.receivedBy && (
-                            <span className="payment-received">By: {payment.receivedBy}</span>
-                          )}
+                <div className="info-card payments-card">
+                  <div className="card-header">
+                    <CreditCard size={20} />
+                    <h4>Payment History</h4>
+                  </div>
+                  <div className="card-content">
+                    <div className="payments-list modern">
+                      {bookingToView.payments.map((payment, index) => (
+                        <div key={index} className="payment-item modern">
+                          <div className="payment-icon-wrapper">
+                            <CreditCard size={20} />
+                          </div>
+                          <div className="payment-info">
+                            <div className="payment-method-badge">{(payment.method || 'CASH').toUpperCase()}</div>
+                            <div className="payment-meta">
+                              <Clock size={12} />
+                              <span>{new Date(payment.processedAt || payment.createdAt).toLocaleDateString()} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            {payment.reference && (
+                              <div className="payment-reference">
+                                <span>Ref: {payment.reference}</span>
+                              </div>
+                            )}
+                            {payment.receivedBy && (
+                              <div className="payment-received">
+                                <User size={12} />
+                                <span>{payment.receivedBy}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="payment-amount-badge">৳{parseFloat(payment.amount).toFixed(2)}</div>
                         </div>
-                        <div className="payment-amount">৳{parseFloat(payment.amount).toFixed(2)}</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Financial Totals Summary */}
+              {/* Financial Summary Card */}
               {bookingToView.totals && (
-                <div className="financial-summary-card">
-                  <div className="financial-header">
-                    <h4>💰 Financial Summary</h4>
+                <div className="info-card financial-card">
+                  <div className="card-header financial-header">
+                    <span className="header-icon">💰</span>
+                    <h4>Financial Summary</h4>
+                    <div className="header-badge">
+                      {bookingToView.totals.balance > 0 ? (
+                        <span className="badge-due">Payment Pending</span>
+                      ) : (
+                        <span className="badge-paid">Fully Paid</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="financial-body">
-                    {/* Breakdown Section */}
-                    <div className="breakdown-section">
-                      <div className="breakdown-item">
-                        <div className="breakdown-label">
-                          <span className="breakdown-icon">🛏️</span>
-                          <span>Room Charges</span>
-                        </div>
-                        <div className="breakdown-value">৳{bookingToView.totals.roomTotal?.toFixed(2)}</div>
+                  <div className="card-content financial-content">
+                    {/* Compact Charges List */}
+                    <div className="financial-charges-list">
+                      <div className="charge-line-item">
+                        <span className="charge-line-label">
+                          <span className="charge-line-icon">🛏️</span>
+                          Room Charges
+                        </span>
+                        <span className="charge-line-value">৳{bookingToView.totals.roomTotal?.toFixed(2)}</span>
                       </div>
                       
                       {bookingToView.totals.additionalCharges > 0 && (
-                        <div className="breakdown-item">
-                          <div className="breakdown-label">
-                            <span className="breakdown-icon">➕</span>
-                            <span>Additional Charges</span>
-                          </div>
-                          <div className="breakdown-value additional">৳{bookingToView.totals.additionalCharges?.toFixed(2)}</div>
+                        <div className="charge-line-item">
+                          <span className="charge-line-label">
+                            <span className="charge-line-icon">➕</span>
+                            Extra Charges
+                          </span>
+                          <span className="charge-line-value">৳{bookingToView.totals.additionalCharges?.toFixed(2)}</span>
                         </div>
                       )}
-                      
-                      <div className="breakdown-divider"></div>
-                      
-                      <div className="breakdown-item subtotal-row">
-                        <div className="breakdown-label">
-                          <span>Subtotal</span>
-                        </div>
-                        <div className="breakdown-value">৳{bookingToView.totals.subtotal?.toFixed(2)}</div>
-                      </div>
                       
                       {bookingToView.totals.vat > 0 && (
-                        <div className="breakdown-item">
-                          <div className="breakdown-label">
-                            <span className="breakdown-icon">📊</span>
-                            <span>VAT</span>
-                          </div>
-                          <div className="breakdown-value">৳{bookingToView.totals.vat?.toFixed(2)}</div>
+                        <div className="charge-line-item">
+                          <span className="charge-line-label">
+                            <span className="charge-line-icon">📊</span>
+                            VAT
+                          </span>
+                          <span className="charge-line-value">৳{bookingToView.totals.vat?.toFixed(2)}</span>
                         </div>
                       )}
                     </div>
 
-                    {/* Grand Total */}
-                    <div className="grand-total-row">
-                      <div className="grand-total-label">Grand Total</div>
-                      <div className="grand-total-amount">৳{bookingToView.totals.grandTotal?.toFixed(2)}</div>
-                    </div>
-
-                    {/* Payment Status Section */}
-                    <div className="payment-status-section">
-                      <div className="payment-status-item paid">
-                        <div className="status-icon">✓</div>
-                        <div className="status-content">
-                          <div className="status-label">Total Paid</div>
-                          <div className="status-amount">৳{bookingToView.totals.totalPaid?.toFixed(2)}</div>
+                    {/* Financial Summary Row */}
+                    <div className="financial-summary-row">
+                      {/* Grand Total */}
+                      <div className="financial-box total-box">
+                        <div className="fb-icon total-icon">💵</div>
+                        <div className="fb-content">
+                          <span className="fb-label">Grand Total</span>
+                          <span className="fb-amount total-amount">৳{bookingToView.totals.grandTotal?.toFixed(2)}</span>
                         </div>
                       </div>
                       
-                      <div className={`payment-status-item balance ${bookingToView.totals.balance > 0 ? 'due' : 'clear'}`}>
-                        <div className="status-icon">{bookingToView.totals.balance > 0 ? '⚠' : '✓'}</div>
-                        <div className="status-content">
-                          <div className="status-label">Balance Due</div>
-                          <div className="status-amount">৳{bookingToView.totals.balance?.toFixed(2)}</div>
+                      {/* Total Paid */}
+                      <div className="financial-box paid-box">
+                        <div className="fb-icon paid-icon">✓</div>
+                        <div className="fb-content">
+                          <span className="fb-label">Total Paid</span>
+                          <span className="fb-amount paid-amount">৳{bookingToView.totals.totalPaid?.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Balance Due */}
+                      <div className={`financial-box ${bookingToView.totals.balance > 0 ? 'due-box' : 'clear-box'}`}>
+                        <div className={`fb-icon ${bookingToView.totals.balance > 0 ? 'due-icon' : 'clear-icon'}`}>
+                          {bookingToView.totals.balance > 0 ? '⚠' : '✓'}
+                        </div>
+                        <div className="fb-content">
+                          <span className="fb-label">Balance Due</span>
+                          <span className={`fb-amount ${bookingToView.totals.balance > 0 ? 'due-amount' : 'clear-amount'}`}>
+                            ৳{bookingToView.totals.balance?.toFixed(2)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1059,16 +1236,18 @@ const Bookings = () => {
                 </div>
               )}
             </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={handleCloseViewModal}>
+            
+            <div className="modal-actions modern-actions">
+              <button className="btn btn-secondary modern-btn" onClick={handleCloseViewModal}>
+                <X size={18} />
                 Close
               </button>
-              <button className="btn btn-info" onClick={handleAddPaymentClick}>
-                <CreditCard size={20} />
+              <button className="btn btn-info modern-btn" onClick={handleAddPaymentClick}>
+                <CreditCard size={18} />
                 Add Payment
               </button>
-              <button className="btn btn-success" onClick={handleViewInvoice}>
-                <Eye size={20} />
+              <button className="btn btn-success modern-btn" onClick={handleViewInvoice}>
+                <Eye size={18} />
                 View Invoice
               </button>
             </div>
