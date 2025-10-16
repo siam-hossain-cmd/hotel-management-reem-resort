@@ -89,12 +89,6 @@ const Sidebar = () => {
           icon: Eye, 
           label: 'View Invoices', 
           show: canPerformAction('view_invoices') || isMasterAdmin() 
-        },
-        { 
-          path: '/create-invoice', 
-          icon: Plus, 
-          label: 'Create Invoice', 
-          show: canPerformAction('create_invoice') 
         }
       ]
     },

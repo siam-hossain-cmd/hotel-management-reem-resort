@@ -26,6 +26,13 @@ const Bookings = () => {
     reference: '',
     notes: ''
   });
+  const [showChargeModal, setShowChargeModal] = useState(false);
+  const [chargeData, setChargeData] = useState({
+    chargeType: '',
+    customDescription: '',
+    amount: '',
+    notes: ''
+  });
   const [sortConfig, setSortConfig] = useState({ key: 'checkInDate', direction: 'descending' });
 
   // Format date to dd/mm/yyyy
@@ -383,6 +390,80 @@ const Bookings = () => {
     }
   };
 
+  const handleAddChargeClick = () => {
+    if (bookingToView) {
+      setSelectedBooking(bookingToView);
+      setShowChargeModal(true);
+      setChargeData({
+        chargeType: '',
+        customDescription: '',
+        amount: '',
+        notes: ''
+      });
+    }
+  };
+
+  const handleCloseChargeModal = () => {
+    setShowChargeModal(false);
+    setChargeData({
+      chargeType: '',
+      customDescription: '',
+      amount: '',
+      notes: ''
+    });
+  };
+
+  const handleChargeSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedBooking) {
+      alert('No booking selected');
+      return;
+    }
+
+    try {
+      const description = chargeData.chargeType === 'Others' 
+        ? chargeData.customDescription 
+        : chargeData.chargeType;
+
+      if (!description || !chargeData.amount) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      const chargePayload = {
+        description: description,
+        amount: parseFloat(chargeData.amount),
+        notes: chargeData.notes || ''
+      };
+
+      const result = await api.addBookingCharge(selectedBooking.id, chargePayload);
+      
+      if (result.success) {
+        alert('Charge added successfully!');
+        handleCloseChargeModal();
+        // Reload bookings to show updated charge
+        await loadBookings();
+        // Reload view modal if it was open
+        if (bookingToView) {
+          await handleViewBooking(selectedBooking);
+        }
+      } else {
+        alert('Failed to add charge: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error adding charge:', error);
+      alert('Error adding charge: ' + error.message);
+    }
+  };
+
+  const getChargeDescription = () => {
+    if (chargeData.chargeType === 'Others') {
+      return chargeData.customDescription;
+    }
+    return chargeData.chargeType;
+  };
+
   const handleViewInvoice = async () => {
     if (!bookingToView) return;
     
@@ -489,9 +570,9 @@ const Bookings = () => {
     const roomTotal = baseAmount - discountAmount;
     const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
 
-    // Calculate additional charges total
+    // Calculate additional charges total - Backend returns totalAmount (camelCase)
     const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
-      sum + parseFloat(c.amount || 0), 0
+      sum + parseFloat(c.totalAmount || c.amount || 0), 0
     );
 
     return {
@@ -528,7 +609,7 @@ const Bookings = () => {
         }],
       additionalCharges: (invoice.charges || []).map(charge => ({
         description: charge.description,
-        amount: parseFloat(charge.amount || 0)
+        amount: parseFloat(charge.totalAmount || charge.amount || 0)
       })),
       originalSubtotal: baseAmount,
       totalDiscount: discountAmount,
@@ -1136,18 +1217,32 @@ const Bookings = () => {
                   </div>
                   <div className="card-content">
                     <div className="charges-list">
-                      {bookingToView.charges.map((charge, index) => (
-                        <div key={index} className="charge-item modern">
-                          <div className="charge-info">
-                            <span className="charge-name">{charge.description}</span>
-                            <span className="charge-date">
-                              <Clock size={12} />
-                              {formatDate(charge.created_at)} at {new Date(charge.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </span>
+                      {bookingToView.charges.map((charge, index) => {
+                        console.log('💰 Charge data:', charge);
+                        const chargeAmount = parseFloat(charge.totalAmount || charge.amount || 0);
+                        const chargeDate = charge.createdAt || charge.created_at || charge.date;
+                        
+                        return (
+                          <div key={index} className="charge-item modern">
+                            <div className="charge-info">
+                              <span className="charge-name">{charge.description || 'Additional Charge'}</span>
+                              <span className="charge-date">
+                                <Clock size={12} />
+                                {chargeDate ? (
+                                  <>
+                                    {formatDate(chargeDate)} at {new Date(chargeDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  </>
+                                ) : (
+                                  'Date not available'
+                                )}
+                              </span>
+                            </div>
+                            <div className="charge-amount">
+                              ৳{isNaN(chargeAmount) ? '0.00' : chargeAmount.toFixed(2)}
+                            </div>
                           </div>
-                          <div className="charge-amount">৳{parseFloat(charge.amount).toFixed(2)}</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1282,6 +1377,10 @@ const Bookings = () => {
                 <X size={18} />
                 Close
               </button>
+              <button className="btn btn-warning modern-btn" onClick={handleAddChargeClick}>
+                <Plus size={18} />
+                Add Charge
+              </button>
               <button className="btn btn-info modern-btn" onClick={handleAddPaymentClick}>
                 <CreditCard size={18} />
                 Add Payment
@@ -1378,6 +1477,104 @@ const Bookings = () => {
                   <button type="submit" className="btn btn-primary">
                     <CreditCard size={20} />
                     Add Payment
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Charge Modal */}
+      {showChargeModal && selectedBooking && (
+        <div className="modal-overlay" onClick={handleCloseChargeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Additional Charge</h2>
+              <button className="close-btn" onClick={handleCloseChargeModal}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="booking-summary">
+                <h4>Booking Details</h4>
+                <p><strong>Guest:</strong> {selectedBooking.guestName}</p>
+                <p><strong>Room:</strong> {selectedBooking.roomNumber} - {selectedBooking.roomType}</p>
+                <p><strong>Booking Ref:</strong> {selectedBooking.bookingRef}</p>
+              </div>
+              
+              <form onSubmit={handleChargeSubmit} className="payment-form">
+                <div className="form-group">
+                  <label htmlFor="chargeType">Charge Type *</label>
+                  <select
+                    id="chargeType"
+                    value={chargeData.chargeType}
+                    onChange={(e) => setChargeData({ ...chargeData, chargeType: e.target.value })}
+                    required
+                  >
+                    <option value="">Select charge type...</option>
+                    <option value="Late Check-out Fee">Late Check-out Fee</option>
+                    <option value="Early Check-in Fee">Early Check-in Fee</option>
+                    <option value="Smoking Fine">Smoking Fine</option>
+                    <option value="Room Damage Fee">Room Damage Fee</option>
+                    <option value="Lost Keycard Fee">Lost Keycard Fee</option>
+                    <option value="Excessive Cleaning Fee">Excessive Cleaning Fee</option>
+                    <option value="Unauthorized Guest Fee">Unauthorized Guest Fee</option>
+                    <option value="Linen/Towel Damage Fee">Linen/Towel Damage Fee</option>
+                    <option value="Lost Item or Appliance Damage Fee">Lost Item or Appliance Damage Fee</option>
+                    <option value="Mini-bar Charges">Mini-bar Charges</option>
+                    <option value="Room Service">Room Service</option>
+                    <option value="Laundry Service">Laundry Service</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+
+                {chargeData.chargeType === 'Others' && (
+                  <div className="form-group">
+                    <label htmlFor="customDescription">Custom Description *</label>
+                    <input
+                      type="text"
+                      id="customDescription"
+                      value={chargeData.customDescription}
+                      onChange={(e) => setChargeData({ ...chargeData, customDescription: e.target.value })}
+                      required
+                      placeholder="Enter custom charge description"
+                    />
+                  </div>
+                )}
+                
+                <div className="form-group">
+                  <label htmlFor="chargeAmount">Amount *</label>
+                  <input
+                    type="number"
+                    id="chargeAmount"
+                    step="0.01"
+                    min="0.01"
+                    value={chargeData.amount}
+                    onChange={(e) => setChargeData({ ...chargeData, amount: e.target.value })}
+                    required
+                    placeholder="Enter charge amount"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="chargeNotes">Notes</label>
+                  <textarea
+                    id="chargeNotes"
+                    rows="3"
+                    value={chargeData.notes}
+                    onChange={(e) => setChargeData({ ...chargeData, notes: e.target.value })}
+                    placeholder="Additional notes about this charge..."
+                  />
+                </div>
+                
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseChargeModal}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    <Plus size={20} />
+                    Add Charge
                   </button>
                 </div>
               </form>
