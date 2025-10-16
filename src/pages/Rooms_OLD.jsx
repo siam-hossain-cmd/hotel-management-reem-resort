@@ -18,8 +18,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import AddRoomForm from '../components/AddRoomForm';
-import '../App.css';
-import '../rooms.css';
 
 const Rooms = () => {
   const [rooms, setRooms] = useState([]);
@@ -30,11 +28,11 @@ const Rooms = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
-  const [viewMode, setViewMode] = useState('grid');
-  const [editingRoom, setEditingRoom] = useState(null);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   
   const { canPerformAction } = useAuth();
 
+  // Define permission functions
   const canEditRooms = () => canPerformAction('edit_rooms');
 
   useEffect(() => {
@@ -44,10 +42,12 @@ const Rooms = () => {
   const loadRoomsData = async () => {
     try {
       setLoading(true);
+      // Use new MySQL API instead of Firebase
       const roomsResponse = await api.getRooms();
       if (roomsResponse.success) {
         setRooms(roomsResponse.rooms);
         
+        // Extract unique room types from rooms data
         const uniqueTypes = [...new Set(roomsResponse.rooms.map(room => room.room_type))];
         const roomTypesData = uniqueTypes.map((type, index) => ({
           id: index + 1,
@@ -70,23 +70,28 @@ const Rooms = () => {
   };
 
   const handleRoomAdded = async () => {
+    // Reload rooms data when a new room is added
     await loadRoomsData();
     setShowAddRoomForm(false);
   };
-
-  const handleEditRoom = (room) => {
-    if (!canEditRooms()) {
-      alert('You do not have permission to edit rooms');
-      return;
+        });
+      } else {
+        setUploadStatus({ 
+          type: 'success', 
+          message: `Successfully uploaded ${result.rooms.length} rooms and ${result.roomTypes.length} room types`,
+          details: result
+        });
+      }
+      
+      // Reload data
+      await loadRoomsData();
+      
+    } catch (error) {
+      setUploadStatus({ 
+        type: 'error', 
+        message: `Upload failed: ${error.message}` 
+      });
     }
-    setEditingRoom(room);
-    // For now, just show an alert. You can implement a proper edit modal later
-    alert(`Edit functionality for Room ${room.room_number} - Coming soon!\nRoom Type: ${room.room_type}\nCapacity: ${room.capacity}\nRate: ৳${room.rate}`);
-  };
-
-  const handleViewRoom = (room) => {
-    // View room details
-    alert(`Room ${room.room_number} Details:\n\nType: ${room.room_type}\nDescription: ${room.description || 'Hotel room'}\nCapacity: ${room.capacity} guests\nRate: ৳${room.rate}/night\nFloor: ${room.floor || 'N/A'}\nStatus: ${room.status}`);
   };
 
   const handleUpdateRoomStatus = async (roomId, newStatus) => {
@@ -96,12 +101,10 @@ const Rooms = () => {
     }
 
     try {
-      const result = await api.updateRoomStatus(roomId, newStatus);
-      if (result.success) {
-        setRooms(rooms.map(room => 
-          room.id === roomId ? { ...room, status: newStatus } : room
-        ));
-      }
+      await roomService.updateRoomStatus(roomId, newStatus);
+      setRooms(rooms.map(room => 
+        room.id === roomId ? { ...room, status: newStatus } : room
+      ));
     } catch (error) {
       alert(`Failed to update room status: ${error.message}`);
     }
@@ -110,13 +113,13 @@ const Rooms = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'available':
-        return <CheckCircle size={18} className="text-green-600" />;
+        return <CheckCircle size={16} className="text-green-600" />;
       case 'occupied':
-        return <XCircle size={18} className="text-red-600" />;
+        return <XCircle size={16} className="text-red-600" />;
       case 'maintenance':
-        return <AlertCircle size={18} className="text-yellow-600" />;
+        return <AlertCircle size={16} className="text-yellow-600" />;
       default:
-        return <AlertCircle size={18} className="text-gray-600" />;
+        return <AlertCircle size={16} className="text-gray-600" />;
     }
   };
 
@@ -134,6 +137,7 @@ const Rooms = () => {
   };
 
   const filteredRooms = rooms.filter(room => {
+    // Adapt to MySQL database structure
     const roomNumber = room.room_number || room.roomNumber;
     const roomType = room.room_type || room.type;
     
@@ -144,13 +148,6 @@ const Rooms = () => {
     
     return matchesSearch && matchesStatus && matchesType;
   });
-
-  // Get room stats
-  const roomStats = {
-    total: rooms.length,
-    available: rooms.filter(r => r.status === 'available').length,
-    maintenance: rooms.filter(r => r.status === 'maintenance').length
-  };
 
   if (loading) {
     return (
@@ -164,14 +161,22 @@ const Rooms = () => {
   }
 
   return (
-    <div className="rooms-page-modern">
-      {/* Header */}
-      <div className="page-header-modern">
+    <div className="rooms-page">
+      <div className="page-header">
         <h1>Room Management</h1>
         <div className="header-actions">
+          {canUploadRooms() && (
+            <button 
+              className="btn btn-secondary"
+              onClick={() => setShowUploadModal(true)}
+            >
+              <Upload size={20} />
+              Upload to Firebase
+            </button>
+          )}
           {canPerformAction('edit_rooms') && (
             <button 
-              className="btn btn-primary-modern"
+              className="btn btn-primary"
               onClick={() => setShowAddRoomForm(true)}
             >
               <Plus size={20} />
@@ -182,65 +187,30 @@ const Rooms = () => {
       </div>
 
       {error && (
-        <div className="error-message-modern">
-          <AlertCircle size={20} />
+        <div className="error-message">
           <span>{error}</span>
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="room-stats-grid">
-        <div className="stat-card-room total">
-          <div className="stat-icon">
-            <Bed size={24} />
-          </div>
-          <div className="stat-content">
-            <div className="stat-label">Total Rooms</div>
-            <div className="stat-value">{roomStats.total}</div>
-          </div>
-        </div>
-        
-        <div className="stat-card-room available">
-          <div className="stat-icon">
-            <CheckCircle size={24} />
-          </div>
-          <div className="stat-content">
-            <div className="stat-label">Available</div>
-            <div className="stat-value">{roomStats.available}</div>
-          </div>
-        </div>
-        
-        <div className="stat-card-room maintenance">
-          <div className="stat-icon">
-            <AlertCircle size={24} />
-          </div>
-          <div className="stat-content">
-            <div className="stat-label">Maintenance</div>
-            <div className="stat-value">{roomStats.maintenance}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="filters-modern">
-        <div className="search-bar-modern">
+      <div className="filters">
+        <div className="search-box">
           <Search size={20} />
           <input
             type="text"
-            placeholder="Search rooms by number or type..."
+            placeholder="Search rooms..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         
-        <div className="filter-group-modern">
-          <Filter size={18} />
+        <div className="filter-group">
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
             <option value="all">All Status</option>
             <option value="available">Available</option>
+            <option value="occupied">Occupied</option>
             <option value="maintenance">Maintenance</option>
           </select>
           
@@ -256,48 +226,30 @@ const Rooms = () => {
             ))}
           </select>
         </div>
-
-        <div className="view-toggle">
-          <button 
-            className={viewMode === 'grid' ? 'active' : ''}
-            onClick={() => setViewMode('grid')}
-            title="Grid View"
-          >
-            <Grid size={20} />
-          </button>
-          <button 
-            className={viewMode === 'list' ? 'active' : ''}
-            onClick={() => setViewMode('list')}
-            title="List View"
-          >
-            <List size={20} />
-          </button>
-        </div>
       </div>
 
-      {/* Rooms Grid/List */}
-      <div className={`rooms-container ${viewMode === 'list' ? 'list-view' : 'grid-view'}`}>
+      <div className="rooms-grid">
         {filteredRooms.map(room => (
-          <div key={room.id} className={`room-card-modern ${getStatusClass(room.status)}`}>
-            <div className="room-card-header">
-              <div className="room-number-badge">
+          <div key={room.id} className={`room-card ${getStatusClass(room.status)}`}>
+            <div className="room-header">
+              <div className="room-number">
                 <Bed size={20} />
-                <span className="room-number">Room {room.room_number || room.roomNumber}</span>
+                <span>Room {room.room_number || room.roomNumber}</span>
               </div>
-              <div className={`room-status-badge status-${room.status}`}>
+              <div className="room-status">
                 {getStatusIcon(room.status)}
                 <span>{room.status}</span>
               </div>
             </div>
             
-            <div className="room-card-body">
-              <h3 className="room-type">{room.room_type || room.type}</h3>
+            <div className="room-details">
+              <h3>{room.room_type || room.type}</h3>
               <p className="room-description">{room.description || 'Hotel room'}</p>
               
-              <div className="room-info-grid">
+              <div className="room-info">
                 <div className="info-item">
                   <Users size={16} />
-                  <span>{room.capacity} Guests</span>
+                  <span>{room.capacity} guests</span>
                 </div>
                 <div className="info-item">
                   <DollarSign size={16} />
@@ -309,43 +261,31 @@ const Rooms = () => {
                 </div>
               </div>
               
-              {room.amenities && room.amenities.length > 0 && (
-                <div className="room-amenities">
-                  {room.amenities.slice(0, 3).map((amenity, index) => (
-                    <span key={index} className="amenity-badge">
-                      {amenity}
-                    </span>
-                  ))}
-                  {room.amenities.length > 3 && (
-                    <span className="amenity-badge more">+{room.amenities.length - 3}</span>
-                  )}
-                </div>
-              )}
+              <div className="room-amenities">
+                {room.amenities?.slice(0, 4).map((amenity, index) => (
+                  <span key={index} className="amenity-tag">
+                    {amenity}
+                  </span>
+                )) || <span className="amenity-tag">Standard amenities</span>}
+                {room.amenities?.length > 4 && (
+                  <span className="amenity-tag">+{room.amenities.length - 4} more</span>
+                )}
+              </div>
             </div>
             
-            <div className="room-card-footer">
-              <button 
-                className="action-btn-modern view" 
-                title="View Details"
-                onClick={() => handleViewRoom(room)}
-              >
+            <div className="room-actions">
+              <button className="action-btn" title="View Details">
                 <Eye size={16} />
-                <span>View</span>
               </button>
               {canPerformAction('edit_rooms') && (
                 <>
-                  <button 
-                    className="action-btn-modern edit" 
-                    title="Edit Room"
-                    onClick={() => handleEditRoom(room)}
-                  >
+                  <button className="action-btn" title="Edit Room">
                     <Edit size={16} />
-                    <span>Edit</span>
                   </button>
                   <select
                     value={room.status}
                     onChange={(e) => handleUpdateRoomStatus(room.id, e.target.value)}
-                    className="status-select-modern"
+                    className="status-select"
                     title="Update Status"
                   >
                     <option value="available">Available</option>
@@ -360,34 +300,79 @@ const Rooms = () => {
       </div>
 
       {filteredRooms.length === 0 && (
-        <div className="empty-state-modern">
-          <Bed size={64} />
-          <h3>No rooms found</h3>
-          <p>Try adjusting your search or filters</p>
+        <div className="empty-state">
+          <Bed size={48} />
+          <p>No rooms found. Add rooms to get started!</p>
+          <p className="text-sm text-gray-600">Database is empty and ready for admin to add rooms.</p>
         </div>
       )}
 
-      {/* Add Room Form Modal */}
-      {showAddRoomForm && (
+      {/* Upload Modal */}
+      {showUploadModal && (
         <div className="modal-overlay">
-          <div className="modal-large">
+          <div className="modal">
             <div className="modal-header">
-              <h2>Add New Room</h2>
+              <h2>Upload Rooms to Firebase</h2>
               <button 
                 className="modal-close"
-                onClick={() => setShowAddRoomForm(false)}
+                onClick={() => setShowUploadModal(false)}
               >
                 ×
               </button>
             </div>
+            
             <div className="modal-content">
-              <AddRoomForm onRoomAdded={handleRoomAdded} />
+              <p>This will upload all room data from the local JSON file to Firebase Firestore.</p>
+              
+              {uploadStatus && (
+                <div className={`status-message ${uploadStatus.type}`}>
+                  <p>{uploadStatus.message}</p>
+                  {uploadStatus.details && (
+                    <div className="status-details">
+                      <p>Rooms uploaded: {uploadStatus.details.rooms?.length || 0}</p>
+                      <p>Room types uploaded: {uploadStatus.details.roomTypes?.length || 0}</p>
+                      {uploadStatus.details.errors?.length > 0 && (
+                        <div>
+                          <p>Errors:</p>
+                          <ul>
+                            {uploadStatus.details.errors.map((error, index) => (
+                              <li key={index}>{error}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="modal-actions">
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowUploadModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleUploadToFirebase}
+                  disabled={uploadStatus?.type === 'loading'}
+                >
+                  {uploadStatus?.type === 'loading' ? 'Uploading...' : 'Upload'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+          </div>
+        )}
+
+      {/* Add Room Form Modal */}
+      {showAddRoomForm && (
+        <AddRoomForm
+          onRoomAdded={handleRoomAdded}
+          onCancel={() => setShowAddRoomForm(false)}
+        />
       )}
     </div>
   );
-};
-
-export default Rooms;
+};export default Rooms;

@@ -28,6 +28,16 @@ const Bookings = () => {
   });
   const [sortConfig, setSortConfig] = useState({ key: 'checkInDate', direction: 'descending' });
 
+  // Format date to dd/mm/yyyy
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // Load bookings on component mount
   useEffect(() => {
     loadBookings();
@@ -714,6 +724,22 @@ const Bookings = () => {
     );
   };
 
+  // Get today's checkouts with useMemo for efficiency
+  const todaysCheckouts = React.useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return sortedAndFilteredBookings.filter(booking => {
+      const checkoutDate = new Date(booking.checkOutDate).toISOString().split('T')[0];
+      return checkoutDate === today && (booking.status === 'checked-in' || booking.status === 'confirmed');
+    });
+  }, [sortedAndFilteredBookings]);
+
+  // Handle quick checkout from priority section
+  const handleCheckOut = async (booking) => {
+    if (window.confirm(`Check out ${booking.guestName} from Room ${booking.roomNumber}?`)) {
+      await handleStatusChange(booking.id, 'checked-out');
+    }
+  };
+
   if (loading) {
     return (
       <div className="bookings-page">
@@ -726,30 +752,86 @@ const Bookings = () => {
   }
 
   return (
-    <div className="bookings-page">
-      <div className="page-header">
+    <div className="bookings-page modern-bookings">
+      {/* Header */}
+      <div className="page-header-modern">
         <h1>Bookings & Reservations</h1>
         {canPerformAction('create_booking') && (
-          <Link to="/create-booking" className="btn btn-primary">
+          <Link to="/create-booking" className="btn btn-primary-modern">
             <Plus size={20} />
             New Booking
           </Link>
         )}
       </div>
 
-      <div className="page-filters">
-        <div className="search-bar">
+      {/* Stats Cards */}
+      <div className="booking-stats-grid">
+        <div className="stat-card-modern total">
+          <div className="stat-label">Total Bookings</div>
+          <div className="stat-value">{bookings.length}</div>
+        </div>
+        
+        <div className="stat-card-modern confirmed">
+          <div className="stat-label">Confirmed (Awaiting CI)</div>
+          <div className="stat-value">{bookings.filter(b => b.status === 'confirmed').length}</div>
+        </div>
+        
+        <div className="stat-card-modern checked-in">
+          <div className="stat-label">Currently Checked In</div>
+          <div className="stat-value">{bookings.filter(b => b.status === 'checked-in').length}</div>
+        </div>
+        
+        <div className="stat-card-modern checked-out">
+          <div className="stat-label">Today's Check-Outs</div>
+          <div className="stat-value">{todaysCheckouts.length}</div>
+        </div>
+      </div>
+
+      {/* Priority Departures - Today's Checkouts */}
+      <div className="priority-section">
+        <div className="priority-header">
+          <div className="priority-title">
+            <AlertTriangle size={24} />
+            <h2>Priority Departures Today ({todaysCheckouts.length} Guests)</h2>
+          </div>
+          <button className="view-all-link">View All Departures</button>
+        </div>
+        
+        {todaysCheckouts.length > 0 ? (
+          <div className="priority-cards-grid">
+            {todaysCheckouts.slice(0, 3).map(booking => (
+              <div key={booking.id} className="priority-card">
+                <div className="priority-card-header">
+                  <div className="room-label">Room {booking.roomNumber}</div>
+                  <div className="guest-name-priority">{booking.guestName}, {booking.totalNights} nights</div>
+                </div>
+                <button className="checkout-btn-small" onClick={() => handleCheckOut(booking)}>
+                  Check Out
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="no-checkouts-message">
+            <p>No departures scheduled for today</p>
+          </div>
+        )}
+      </div>
+
+      {/* Search and Filters */}
+      <div className="search-filter-bar">
+        <div className="search-bar-modern">
           <Search size={20} />
           <input
             type="text"
-            placeholder="Search by guest name, email, room number, or booking reference..."
+            placeholder="Search by guest, room, or ref..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         
-        <div className="filter-group">
-          <Filter size={20} />
+        <div className="filter-group-modern">
+          <Filter size={18} />
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="all">All Status</option>
             <option value="confirmed">Confirmed</option>
@@ -761,124 +843,82 @@ const Bookings = () => {
         </div>
       </div>
 
-      <div className="bookings-summary">
-        <div className="summary-card">
-          <h3>Total Bookings</h3>
-          <p className="summary-number">{bookings.length}</p>
-        </div>
-        <div className="summary-card confirmed">
-          <h3>Confirmed</h3>
-          <p className="summary-number">{bookings.filter(b => b.status === 'confirmed').length}</p>
-        </div>
-        <div className="summary-card checked-in">
-          <h3>Checked In</h3>
-          <p className="summary-number">{bookings.filter(b => b.status === 'checked-in').length}</p>
-        </div>
-        <div className="summary-card checked-out">
-          <h3>Checked Out</h3>
-          <p className="summary-number">{bookings.filter(b => b.status === 'checked-out').length}</p>
-        </div>
-      </div>
-
-      <div className="bookings-table-container">
-        <table className="bookings-table">
+      {/* Bookings Table */}
+      <div className="modern-table-container">
+        <table className="modern-bookings-table">
           <thead>
             <tr>
-              <th>Booking Ref</th>
+              <th>REF</th>
               <th onClick={() => requestSort('guestName')} className="sortable">
-                Guest{getSortIndicator('guestName')}
+                GUEST{getSortIndicator('guestName')}
               </th>
-              <th>Room</th>
-              <th onClick={() => requestSort('bookingDate')} className="sortable">
-                Booking Date{getSortIndicator('bookingDate')}
-              </th>
+              <th>ROOM</th>
               <th onClick={() => requestSort('checkInDate')} className="sortable">
-                Check-in{getSortIndicator('checkInDate')}
+                CHECK-IN{getSortIndicator('checkInDate')}
               </th>
-              <th>Check-out</th>
-              <th>Nights</th>
-              <th>Guests</th>
+              <th>CHECK-OUT</th>
+              <th>NIGHTS</th>
+              <th>GUESTS</th>
               <th onClick={() => requestSort('total')} className="sortable">
-                Total{getSortIndicator('total')}
+                TOTAL AMOUNT{getSortIndicator('total')}
               </th>
-              <th>Status</th>
-              <th>Payment</th>
-              <th>Actions</th>
+              <th>STATUS</th>
+              <th>PAID / DUE (BDT)</th>
+              <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {sortedAndFilteredBookings.map((booking) => (
-              <tr key={booking.id}>
-                <td>
-                  <span className="booking-ref">{booking.bookingRef}</span>
+              <tr key={booking.id} className="booking-row-modern">
+                <td className="ref-cell">{booking.bookingRef}</td>
+                <td className="guest-cell">{booking.guestName}</td>
+                <td className="room-cell">{booking.roomNumber}</td>
+                <td className="date-cell">{formatDate(booking.checkInDate)}</td>
+                <td className="date-cell checkout-highlight">
+                  {formatDate(booking.checkOutDate)}
+                  {new Date(booking.checkOutDate).toISOString().split('T')[0] === new Date().toISOString().split('T')[0] && (
+                    <span className="today-badge-inline">(Today)</span>
+                  )}
                 </td>
-                <td>
-                  <div className="guest-info">
-                    <strong>{booking.guestName}</strong>
-                    <div className="guest-contact">
-                      <small>{booking.guestEmail}</small>
-                      <small>{booking.guestPhone}</small>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <div className="room-info">
-                    <strong>Room {booking.roomNumber}</strong>
-                    <small>{booking.roomType}</small>
-                  </div>
-                </td>
-                <td>
-                  <div className="booking-date">
-                    <span>{booking.bookingDate}</span>
-                  </div>
-                </td>
-                <td>{booking.checkInDate}</td>
-                <td>{booking.checkOutDate}</td>
-                <td className="text-center">{booking.totalNights}</td>
+                <td className="text-center nights-cell">{booking.totalNights}</td>
                 <td className="text-center">{booking.guestCount}</td>
-                <td className="amount">৳{booking.total?.toFixed(2)}</td>
-                <td>
-                  <div className="status-controls">
-                    {getStatusBadge(booking.status)}
+                <td className="amount-cell">৳{booking.total?.toFixed(0)}</td>
+                <td className="status-cell">
+                  {getStatusBadge(booking.status)}
+                </td>
+                <td className="payment-cell">
+                  <div className="payment-summary-compact">
+                    <div className="payment-row-compact paid">
+                      Paid: <strong className="paid-color">৳{booking.paidAmount?.toFixed(0)}</strong>
+                    </div>
+                    <div className="payment-row-compact due">
+                      Due: <strong className="due-color">৳{booking.dueBalance?.toFixed(0)}</strong>
+                    </div>
                   </div>
                 </td>
-                <td>
-                  <div className="payment-details-col">
-                    <div className="payment-line">
-                      <span className="payment-label paid">Paid:</span>
-                      <span className="payment-amount paid">৳{booking.paidAmount?.toFixed(2)}</span>
-                    </div>
-                    <div className="payment-line">
-                      <span className="payment-label due">Due:</span>
-                      <span className="payment-amount due">৳{booking.dueBalance?.toFixed(2)}</span>
-                    </div>
-                    {getPaymentBadge(booking.paymentStatus)}
-                  </div>
-                </td>
-                <td>
-                  <div className="action-buttons">
-                    <button className="action-btn view" title="View" onClick={() => handleViewBooking(booking)}>
-                      <Eye size={16} /> View
+                <td className="actions-cell">
+                  <div className="action-buttons-modern">
+                    <button className="action-btn-modern view" title="View" onClick={() => handleViewBooking(booking)}>
+                      View
                     </button>
                     
-                    {/* Quick Action Buttons based on status - temporarily removing permission checks */}
                     {booking.status === 'confirmed' && (
                       <button 
-                        className="action-btn checkin" 
+                        className="action-btn-modern checkin" 
                         title="Check In"
                         onClick={() => handleQuickStatusChange(booking.id, 'checked-in', booking)}
                       >
-                        <LogIn size={16} /> Check In
+                        <LogIn size={14} /> Check In
                       </button>
                     )}
                     
                     {booking.status === 'checked-in' && (
                       <button 
-                        className="action-btn checkout" 
+                        className="action-btn-modern checkout" 
                         title="Check Out"
                         onClick={() => handleQuickStatusChange(booking.id, 'checked-out', booking)}
                       >
-                        <LogOut size={16} /> Check Out
+                        <LogOut size={14} /> Check Out
                       </button>
                     )}
                     
@@ -1022,7 +1062,7 @@ const Bookings = () => {
                       <div className="date-box-icon">📅</div>
                       <div className="date-box-content">
                         <span className="date-box-label">Check-in</span>
-                        <span className="date-box-date">{new Date(bookingToView.checkInDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span className="date-box-date">{formatDate(bookingToView.checkInDate)}</span>
                         <span className="date-box-year">{new Date(bookingToView.checkInDate).getFullYear()}</span>
                       </div>
                     </div>
@@ -1036,7 +1076,7 @@ const Bookings = () => {
                       <div className="date-box-icon">📆</div>
                       <div className="date-box-content">
                         <span className="date-box-label">Check-out</span>
-                        <span className="date-box-date">{new Date(bookingToView.checkOutDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span className="date-box-date">{formatDate(bookingToView.checkOutDate)}</span>
                         <span className="date-box-year">{new Date(bookingToView.checkOutDate).getFullYear()}</span>
                       </div>
                     </div>
@@ -1077,7 +1117,7 @@ const Bookings = () => {
                   <div className="booking-footer-meta">
                     <div className="footer-meta-item">
                       <Clock size={14} />
-                      <span>Booked on {new Date(bookingToView.createdAt).toLocaleDateString()}</span>
+                      <span>Booked on {formatDate(bookingToView.createdAt)}</span>
                     </div>
                     <div className="footer-meta-item">
                       <User size={14} />
@@ -1102,7 +1142,7 @@ const Bookings = () => {
                             <span className="charge-name">{charge.description}</span>
                             <span className="charge-date">
                               <Clock size={12} />
-                              {new Date(charge.created_at).toLocaleDateString()} at {new Date(charge.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              {formatDate(charge.created_at)} at {new Date(charge.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </span>
                           </div>
                           <div className="charge-amount">৳{parseFloat(charge.amount).toFixed(2)}</div>
@@ -1131,7 +1171,7 @@ const Bookings = () => {
                             <div className="payment-method-badge">{(payment.method || 'CASH').toUpperCase()}</div>
                             <div className="payment-meta">
                               <Clock size={12} />
-                              <span>{new Date(payment.processedAt || payment.createdAt).toLocaleDateString()} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                              <span>{formatDate(payment.processedAt || payment.createdAt)} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             </div>
                             {payment.reference && (
                               <div className="payment-reference">

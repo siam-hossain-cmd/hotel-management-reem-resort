@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { categorizeRoomsByDate } from '../utils/roomAvailability';
 
 const Dashboard = () => {
   const { user, hasPermission, isAdmin, logout } = useAuth();
@@ -46,6 +47,12 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [dateRangeRooms, setDateRangeRooms] = useState({
+    availableRooms: [],
+    bookedRooms: [],
+    maintenanceRooms: []
+  });
   
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
@@ -71,6 +78,77 @@ const Dashboard = () => {
   useEffect(() => {
     loadDashboardData();
   }, [user]);
+
+  useEffect(() => {
+    if (dashboardData.roomDetails.allRooms.length > 0) {
+      loadRoomsByDate(selectedDate);
+    }
+  }, [selectedDate, dashboardData.roomDetails.allRooms]);
+
+  const loadRoomsByDate = async (date) => {
+    try {
+      // Get all rooms
+      const allRooms = dashboardData.roomDetails.allRooms;
+      
+      // Get bookings for the selected date
+      const bookingsResult = await api.getBookings();
+      const bookings = bookingsResult.success ? bookingsResult.bookings : [];
+      
+      console.log('📅 Selected date:', date.toISOString().split('T')[0]);
+      console.log('📋 Total bookings:', bookings.length);
+      
+      // Use the helper function to categorize rooms
+      const { availableRooms, bookedRooms, maintenanceRooms, occupiedRoomNumbers } = 
+        categorizeRoomsByDate(allRooms, bookings, date);
+      
+      console.log('🔒 Occupied room numbers:', occupiedRoomNumbers);
+      console.log('✅ Available rooms:', availableRooms.length, availableRooms.map(r => r.room_number));
+      console.log('🔒 Booked rooms:', bookedRooms.length, bookedRooms.map(r => r.room_number));
+      console.log('🔧 Maintenance rooms:', maintenanceRooms.length);
+      
+      setDateRangeRooms({
+        availableRooms,
+        bookedRooms,
+        maintenanceRooms
+      });
+    } catch (error) {
+      console.error('Error loading rooms by date:', error);
+      // Fallback to current room status if date-based lookup fails
+      setDateRangeRooms({
+        availableRooms: dashboardData.roomDetails.availableRooms,
+        bookedRooms: dashboardData.roomDetails.bookedRooms,
+        maintenanceRooms: dashboardData.roomDetails.maintenanceRooms
+      });
+    }
+  };
+
+  const generateDateOptions = () => {
+    const dates = [];
+    const today = new Date();
+    
+    // Generate 30 days from today
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      dates.push(date);
+    }
+    
+    return dates;
+  };
+
+  const formatDateForDisplay = (date) => {
+    const options = { weekday: 'short', month: 'short', day: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  };
+
+  const isToday = (date) => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isSameDay = (date1, date2) => {
+    return date1.toDateString() === date2.toDateString();
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -410,72 +488,142 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Smart Room Display */}
-      <div className="dashboard-section">
+      {/* Professional Room Status Display */}
+      <div className="dashboard-section room-status-overview">
         <h2 className="section-title">
           <Bed size={20} />
           Room Status Overview
         </h2>
         
+        {/* Date Selection Row */}
+        <div className="date-selection-container">
+          <div className="date-selector-header">
+            <Calendar size={18} />
+            <h3>Select Date to View Room Availability</h3>
+          </div>
+          <div className="date-scroll-container">
+            <div className="date-options-row">
+              {generateDateOptions().map((date, index) => (
+                <button
+                  key={index}
+                  className={`date-option-card ${isSameDay(date, selectedDate) ? 'selected' : ''} ${isToday(date) ? 'today' : ''}`}
+                  onClick={() => setSelectedDate(date)}
+                >
+                  <div className="date-day">{date.getDate()}</div>
+                  <div className="date-month">{date.toLocaleDateString('en-US', { month: 'short' })}</div>
+                  <div className="date-weekday">{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                  {isToday(date) && <div className="today-badge">Today</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="selected-date-info">
+            <Clock size={16} />
+            <span>Showing availability for: <strong>{formatDateForDisplay(selectedDate)}</strong></span>
+          </div>
+        </div>
+        
         {/* Available Rooms */}
-        <div className="room-status-section">
-          <h3 className="room-status-title">
-            <CheckCircle size={18} />
-            Available Rooms ({dashboardData.roomDetails.availableRooms.length})
-          </h3>
-          <div className="room-numbers-grid">
-            {dashboardData.roomDetails.availableRooms.map((room, index) => (
-              <div key={index} className="room-number-card available">
-                <div className="room-number">{room.room_number}</div>
-                <div className="room-type">{room.room_type}</div>
-                <div className="room-status-indicator available">Available</div>
+        <div className="room-category-section">
+          <div className="category-header available-header">
+            <div className="header-left">
+              <CheckCircle size={20} />
+              <h3>Available Rooms</h3>
+            </div>
+            <span className="room-count">{dateRangeRooms.availableRooms.length}</span>
+          </div>
+          <div className="professional-room-grid">
+            {dateRangeRooms.availableRooms.map((room, index) => (
+              <div key={index} className="professional-room-card available">
+                <div className="room-card-header">
+                  <div className="room-number-large">{room.room_number}</div>
+                  <div className="status-badge available">
+                    <CheckCircle size={14} />
+                    <span>Available</span>
+                  </div>
+                </div>
+                <div className="room-card-body">
+                  <div className="room-type-label">{room.room_type}</div>
+                  <div className="room-capacity">
+                    <Users size={14} />
+                    <span>Ready for booking</span>
+                  </div>
+                </div>
               </div>
             ))}
-            {dashboardData.roomDetails.availableRooms.length === 0 && (
-              <div className="no-rooms-message">No available rooms</div>
+            {dateRangeRooms.availableRooms.length === 0 && (
+              <div className="no-rooms-message">
+                <Bed size={24} />
+                <p>No available rooms for this date</p>
+              </div>
             )}
           </div>
         </div>
 
         {/* Booked Rooms */}
-        <div className="room-status-section">
-          <h3 className="room-status-title">
-            <XCircle size={18} />
-            Booked Rooms ({dashboardData.roomDetails.bookedRooms.length})
-          </h3>
-          <div className="room-numbers-grid">
-            {dashboardData.roomDetails.bookedRooms.map((room, index) => (
-              <div key={index} className="room-number-card booked">
-                <div className="room-number">{room.room_number}</div>
-                <div className="room-type">{room.room_type}</div>
-                <div className="guest-name">Guest Details</div>
-                <div className="booking-dates">
-                  Currently Occupied
+        <div className="room-category-section">
+          <div className="category-header occupied-header">
+            <div className="header-left">
+              <XCircle size={20} />
+              <h3>Occupied Rooms</h3>
+            </div>
+            <span className="room-count">{dateRangeRooms.bookedRooms.length}</span>
+          </div>
+          <div className="professional-room-grid">
+            {dateRangeRooms.bookedRooms.map((room, index) => (
+              <div key={index} className="professional-room-card occupied">
+                <div className="room-card-header">
+                  <div className="room-number-large">{room.room_number}</div>
+                  <div className="status-badge occupied">
+                    <XCircle size={14} />
+                    <span>Occupied</span>
+                  </div>
                 </div>
-                <div className="room-status-indicator occupied">
-                  Occupied
+                <div className="room-card-body">
+                  <div className="room-type-label">{room.room_type}</div>
+                  <div className="room-capacity">
+                    <Users size={14} />
+                    <span>Currently occupied</span>
+                  </div>
                 </div>
               </div>
             ))}
-            {dashboardData.roomDetails.bookedRooms.length === 0 && (
-              <div className="no-rooms-message">No booked rooms</div>
+            {dateRangeRooms.bookedRooms.length === 0 && (
+              <div className="no-rooms-message">
+                <CheckCircle size={24} />
+                <p>No occupied rooms for this date</p>
+              </div>
             )}
           </div>
         </div>
 
         {/* Maintenance Rooms */}
-        {dashboardData.roomDetails.maintenanceRooms.length > 0 && (
-          <div className="room-status-section">
-            <h3 className="room-status-title">
-              <AlertCircle size={18} />
-              Maintenance Rooms ({dashboardData.roomDetails.maintenanceRooms.length})
-            </h3>
-            <div className="room-numbers-grid">
-              {dashboardData.roomDetails.maintenanceRooms.map((room, index) => (
-                <div key={index} className="room-number-card maintenance">
-                  <div className="room-number">{room.room_number}</div>
-                  <div className="room-type">{room.room_type}</div>
-                  <div className="room-status-indicator maintenance">Under Maintenance</div>
+        {dateRangeRooms.maintenanceRooms.length > 0 && (
+          <div className="room-category-section">
+            <div className="category-header maintenance-header">
+              <div className="header-left">
+                <AlertCircle size={20} />
+                <h3>Maintenance Rooms</h3>
+              </div>
+              <span className="room-count">{dateRangeRooms.maintenanceRooms.length}</span>
+            </div>
+            <div className="professional-room-grid">
+              {dateRangeRooms.maintenanceRooms.map((room, index) => (
+                <div key={index} className="professional-room-card maintenance">
+                  <div className="room-card-header">
+                    <div className="room-number-large">{room.room_number}</div>
+                    <div className="status-badge maintenance">
+                      <AlertCircle size={14} />
+                      <span>Maintenance</span>
+                    </div>
+                  </div>
+                  <div className="room-card-body">
+                    <div className="room-type-label">{room.room_type}</div>
+                    <div className="room-capacity">
+                      <Clock size={14} />
+                      <span>Under maintenance</span>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
