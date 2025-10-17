@@ -41,10 +41,12 @@ const Customers = () => {
 
         // Count active bookings for each customer
         const customersWithBookingCount = customers.map(customer => {
-          const customerBookings = bookings.filter(
-            booking => booking.customer_id === customer.id && 
-            (booking.status === 'confirmed' || booking.status === 'checked_in')
-          );
+          const customerBookings = bookings.filter(booking => {
+            // Normalize status for comparison
+            const normalizedStatus = (booking.status || '').toLowerCase().replace(/_/g, '-');
+            return booking.customer_id === customer.id && 
+              (normalizedStatus === 'confirmed' || normalizedStatus === 'checked-in');
+          });
           
           return {
             ...customer,

@@ -147,8 +147,9 @@ router.get('/:id', async (req, res) => {
               i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
               i.currency, i.status, i.paid_at, i.meta,
               i.snapshot_json, i.file_url, i.preview_url, i.created_at,
-              b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
-              b.discount_amount, b.total_amount as booking_total,
+              i.tax_rate, i.tax_amount,
+              b.booking_reference, b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
+              b.discount_amount, b.subtotal_amount, b.tax_rate as booking_tax_rate, b.tax_amount as booking_tax_amount, b.total_amount as booking_total,
               c.first_name, c.last_name, c.email, c.phone, c.address, c.nid,
               r.room_number, r.room_type, r.capacity
        FROM invoices i
@@ -225,6 +226,8 @@ router.get('/:id', async (req, res) => {
     };
     
     console.log('✅ Final response data:', {
+      invoice_number: responseData.invoice_number,
+      booking_id: responseData.booking_id,
       first_name: responseData.first_name,
       last_name: responseData.last_name,
       email: responseData.email,
@@ -266,8 +269,9 @@ router.get('/booking/:booking_id', async (req, res) => {
         i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
         i.currency, i.status, i.paid_at, i.meta,
         i.snapshot_json, i.file_url, i.preview_url, i.created_at,
-        b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
-        b.discount_amount, b.total_amount as booking_total,
+        i.tax_rate, i.tax_amount,
+        b.booking_reference, b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
+        b.discount_amount, b.subtotal_amount, b.tax_rate as booking_tax_rate, b.tax_amount as booking_tax_amount, b.total_amount as booking_total,
         c.first_name, c.last_name, c.email, c.phone, c.address, c.nid,
         r.room_number, r.room_type, r.capacity, r.rate
        FROM invoices i
@@ -311,6 +315,8 @@ router.get('/booking/:booking_id', async (req, res) => {
         const totalPaid = parseFloat(booking.paid_amount) || 0;
         const totalAmount = parseFloat(booking.total_amount) || 0;
         const dueAmount = totalAmount - totalPaid;
+        const taxRate = parseFloat(booking.tax_rate) || 0;
+        const taxAmount = parseFloat(booking.tax_amount) || 0;
         
         // Determine invoice status
         let invoiceStatus = 'issued';
@@ -320,14 +326,17 @@ router.get('/booking/:booking_id', async (req, res) => {
           invoiceStatus = 'partial';
         }
         
-        // Generate invoice number
-        const invoiceNumber = `INV${Date.now().toString().slice(-6)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
+        // Generate invoice number with booking ID for easy reference
+        // Format: INV-[BookingID]-[Timestamp]
+        const invoiceNumber = `INV-${booking_id}-${Date.now().toString().slice(-6)}`;
+        
+        console.log(`🔢 Generated Invoice Number: ${invoiceNumber} for Booking ID: ${booking_id}`);
         
         // Create invoice
         const [invoiceResult] = await conn.query(
-          `INSERT INTO invoices (invoice_number, booking_id, customer_id, issued_at, total, paid, due, currency, status, created_at, updated_at)
-           VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, NOW(), NOW())`,
-          [invoiceNumber, booking_id, booking.customer_id, totalAmount, totalPaid, dueAmount, 'BDT', invoiceStatus]
+          `INSERT INTO invoices (invoice_number, booking_id, customer_id, issued_at, total, paid, due, tax_rate, tax_amount, currency, status, created_at, updated_at)
+           VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [invoiceNumber, booking_id, booking.customer_id, totalAmount, totalPaid, dueAmount, taxRate, taxAmount, 'BDT', invoiceStatus]
         );
         
         const invoiceId = invoiceResult.insertId;
@@ -351,9 +360,24 @@ router.get('/booking/:booking_id', async (req, res) => {
         
         await conn.commit();
         
-        // Re-fetch the newly created invoice
+        // Re-fetch the newly created invoice WITH FULL JOIN DATA
         [invoices] = await conn.query(
-          'SELECT * FROM invoices WHERE id = ?',
+          `SELECT 
+            i.id, i.invoice_number, i.booking_id, i.customer_id, i.issued_at, i.due_at,
+            i.total, 
+            COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
+            i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+            i.currency, i.status, i.paid_at, i.meta,
+            i.snapshot_json, i.file_url, i.preview_url, i.created_at,
+            b.booking_reference, b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 
+            b.discount_amount, b.total_amount as booking_total,
+            c.first_name, c.last_name, c.email, c.phone, c.address, c.nid,
+            r.room_number, r.room_type, r.capacity, r.rate
+           FROM invoices i
+           LEFT JOIN bookings b ON i.booking_id = b.id
+           LEFT JOIN customers c ON b.customer_id = c.id
+           LEFT JOIN rooms r ON b.room_id = r.id
+           WHERE i.id = ?`,
           [invoiceId]
         );
       } catch (error) {
@@ -386,6 +410,12 @@ router.get('/booking/:booking_id', async (req, res) => {
       booking_id,
       payment_count: payments.length,
       payments: payments
+    });
+    
+    console.log('📋 INVOICE DATA BEING SENT:', {
+      invoice_number: invoice.invoice_number,
+      booking_id: invoice.booking_id,
+      id: invoice.id
     });
     
     res.json({

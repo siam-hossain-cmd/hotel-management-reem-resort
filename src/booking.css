@@ -3088,3 +3088,158 @@ select.form-control {
     min-width: 1000px;
   }
 }
+
+/* Check-In/Check-Out Modal Styles */
+.checkin-checkout-modal {
+  max-width: 550px;
+  width: 90%;
+}
+
+.checkin-checkout-modal .modal-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+}
+
+.checkin-checkout-modal .warning-message {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.checkin-checkout-modal .warning-message h4 {
+  color: #92400e;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.checkin-checkout-modal .warning-message p {
+  color: #78350f;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.checkin-checkout-modal .info-box {
+  background: #dbeafe;
+  border: 1px solid #3b82f6;
+  border-radius: 0.5rem;
+  padding: 0.875rem;
+  margin: 1rem 0;
+}
+
+.checkin-checkout-modal .info-box.early-checkin {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.checkin-checkout-modal .info-box.late-checkin {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.checkin-checkout-modal .info-box.early-checkout {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.checkin-checkout-modal .info-box.late-checkout {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.checkin-checkout-modal .info-box p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.checkin-checkout-modal .success-text {
+  color: #059669;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.checkin-checkout-modal .warning-text {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.checkin-checkout-modal .booking-details {
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.checkin-checkout-modal .booking-details p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.checkin-checkout-modal .booking-details strong {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.checkin-checkout-modal .modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 0.75rem 0.75rem;
+}
+
+.checkin-checkout-modal .btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkin-checkout-modal .btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.checkin-checkout-modal .btn-secondary:hover {
+  background: #d1d5db;
+}
+
+.checkin-checkout-modal .btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.checkin-checkout-modal .btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+}
+
+.checkin-checkout-modal .btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.checkin-checkout-modal .btn-success:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+}
+

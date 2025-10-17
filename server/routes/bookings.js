@@ -99,6 +99,9 @@ router.post('/', async (req, res) => {
       base_amount,
       discount_percentage,
       discount_amount,
+      subtotal_amount,
+      tax_rate,
+      tax_amount,
       paid_amount,
       payment_status,
       status,
@@ -191,9 +194,23 @@ router.post('/', async (req, res) => {
 
     // Insert booking WITHOUT paid_amount first (we'll calculate it from payments table)
     const [bookingResult] = await conn.query(
-      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, base_amount, discount_percentage, discount_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [bookingRef, customer_id, room_id, status, checkin_date, checkout_date, total_amount || 0, base_amount || total_amount || 0, discount_percentage || 0, discount_amount || 0]
+      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, base_amount, discount_percentage, discount_amount, subtotal_amount, tax_rate, tax_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        bookingRef, 
+        customer_id, 
+        room_id, 
+        status, 
+        checkin_date, 
+        checkout_date, 
+        total_amount || 0, 
+        base_amount || total_amount || 0, 
+        discount_percentage || 0, 
+        discount_amount || 0,
+        subtotal_amount || total_amount || 0,
+        tax_rate || 0,
+        tax_amount || 0
+      ]
     );
 
     const bookingId = bookingResult.insertId;
@@ -255,9 +272,9 @@ router.post('/', async (req, res) => {
     // Create invoice for the booking
     const invoiceNumber = `INV${Date.now().toString().slice(-6)}${Math.random().toString(36).substr(2, 3).toUpperCase()}`;
     const [invoiceResult] = await conn.query(
-      `INSERT INTO invoices (invoice_number, booking_id, customer_id, issued_at, total, currency, status, created_at)
-       VALUES (?, ?, ?, NOW(), ?, ?, 'issued', NOW())`,
-      [invoiceNumber, bookingId, customer_id, total_amount || 0, 'BDT']
+      `INSERT INTO invoices (invoice_number, booking_id, customer_id, issued_at, total, tax_rate, tax_amount, currency, status, created_at)
+       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, 'issued', NOW())`,
+      [invoiceNumber, bookingId, customer_id, total_amount || 0, tax_rate || 0, tax_amount || 0, 'BDT']
     );
 
     await conn.commit();

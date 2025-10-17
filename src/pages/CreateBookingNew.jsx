@@ -249,6 +249,12 @@ const CreateBooking = () => {
         checkin_date: bookingDetails.checkin_date,
         checkout_date: bookingDetails.checkout_date,
         total_amount: finalAmount,
+        base_amount: bookingDetails.total_amount, // Original room cost (before discount)
+        discount_percentage: bookingDetails.discount_percentage || 0,
+        discount_amount: bookingDetails.discount_amount || 0,
+        subtotal_amount: bookingDetails.subtotal_before_vat || bookingDetails.total_amount, // After discount, before VAT
+        tax_rate: vatRate,
+        tax_amount: bookingDetails.vat_amount || 0,
         status: 'confirmed',
         payment_status: paymentStatus,
         paid_amount: totalPaid,
@@ -351,6 +357,7 @@ const CreateBooking = () => {
 
     // Calculate per night cost
     const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || invoice.total || 0);
+    const discountPercentage = parseFloat(invoice.discount_percentage || 0);
     const discountAmount = parseFloat(invoice.discount_amount || 0);
     const roomTotal = baseAmount - discountAmount;
     const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
@@ -359,9 +366,18 @@ const CreateBooking = () => {
     const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
       sum + parseFloat(c.amount || 0), 0
     );
+    
+    // Calculate tax/VAT
+    const taxRate = parseFloat(invoice.tax_rate || 0);
+    const subtotalBeforeTax = roomTotal + additionalChargesTotal;
+    const taxAmount = parseFloat(invoice.tax_amount || 0) || (subtotalBeforeTax * taxRate / 100);
+    const finalTotal = subtotalBeforeTax + taxAmount;
 
     return {
       id: invoice.invoice_number || `INV-${invoice.id}`,
+      invoice_number: invoice.invoice_number || `INV-${invoice.id}`, // Add explicit invoice_number field
+      booking_id: invoice.booking_id, // Add explicit booking_id field
+      booking_reference: invoice.booking_reference, // Add booking reference (e.g., BK773337T28)
       invoiceDate: invoice.invoice_date || invoice.issued_at || invoice.created_at,
       dueDate: invoice.due_date || invoice.due_at,
       customerInfo: {
@@ -397,17 +413,22 @@ const CreateBooking = () => {
         amount: parseFloat(charge.amount || 0)
       })),
       originalSubtotal: baseAmount,
+      discountPercentage: discountPercentage,
       totalDiscount: discountAmount,
       subtotal: roomTotal,
       additionalChargesTotal: additionalChargesTotal,
-      tax: parseFloat(invoice.tax_amount || 0),
-      total: parseFloat(invoice.total || baseAmount + additionalChargesTotal),
+      additionalTotal: additionalChargesTotal,
+      taxRate: taxRate,
+      tax: taxAmount,
+      total: parseFloat(invoice.total || finalTotal),
       // Calculate total paid from payments array if not provided
       paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
       balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
       // Add aliases for PDF template compatibility
       totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
       dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
+      paid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      due: parseFloat(invoice.due || invoice.due_amount || 0),
       notes: invoice.notes || '',
       terms: invoice.terms || 'Payment due upon receipt.',
       payments: (invoice.payments || []).map(payment => {
@@ -431,8 +452,13 @@ const CreateBooking = () => {
     const finalTotal = bookingDetails.final_amount || bookingDetails.total_amount;
     const dueAmount = Math.max(0, finalTotal - totalPaid);
 
+    // Generate a temporary booking ID for preview
+    const tempBookingId = Math.floor(Math.random() * 10000);
+
     return {
-      id: 'PREVIEW-' + Date.now(),
+      id: `INV-${tempBookingId}-${Date.now().toString().slice(-6)}`,
+      invoice_number: `INV-${tempBookingId}-${Date.now().toString().slice(-6)}`,
+      booking_id: tempBookingId,
       invoiceDate: new Date().toISOString(),
       dueDate: bookingDetails.checkout_date,
       customerInfo: {

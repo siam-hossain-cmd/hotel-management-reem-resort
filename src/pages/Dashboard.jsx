@@ -104,7 +104,9 @@ const Dashboard = () => {
         const checkoutDate = new Date(booking.checkout_date).toISOString().split('T')[0];
         const isDateInRange = selectedDateStr >= checkinDate && selectedDateStr < checkoutDate;
         const isRoomMatch = booking.room_id === room.id;
-        const isActive = booking.status === 'confirmed' || booking.status === 'checked_in';
+        // Normalize status for comparison (convert underscores to hyphens)
+        const normalizedStatus = (booking.status || '').toLowerCase().replace(/_/g, '-');
+        const isActive = normalizedStatus === 'confirmed' || normalizedStatus === 'checked-in';
         
         return isRoomMatch && isDateInRange && isActive;
       });
@@ -126,7 +128,7 @@ const Dashboard = () => {
             checkOutDate: roomBooking.checkout_date,
             totalNights: Math.ceil((new Date(roomBooking.checkout_date) - new Date(roomBooking.checkin_date)) / (1000 * 60 * 60 * 24)),
             guestCount: roomBooking.capacity || 1,
-            status: roomBooking.status,
+            status: (roomBooking.status || 'confirmed').toLowerCase().replace(/_/g, '-'),
             paymentStatus: bookingSummary.summary.paymentStatus,
             createdAt: roomBooking.created_at,
             createdBy: roomBooking.created_by || 'System',
@@ -283,6 +285,7 @@ const Dashboard = () => {
         const totalNights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
         
         const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || 0);
+        const discountPercentage = parseFloat(invoice.discount_percentage || 0);
         const discountAmount = parseFloat(invoice.discount_amount || 0);
         const roomTotal = baseAmount - discountAmount;
         const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
@@ -292,9 +295,18 @@ const Dashboard = () => {
           sum + parseFloat(c.totalAmount || c.amount || 0), 0
         );
         
+        // Calculate tax/VAT
+        const taxRate = parseFloat(invoice.tax_rate || 0);
+        const subtotalBeforeTax = roomTotal + additionalChargesTotal;
+        const taxAmount = parseFloat(invoice.tax_amount || 0) || (subtotalBeforeTax * taxRate / 100);
+        const finalTotal = subtotalBeforeTax + taxAmount;
+        
         // Transform invoice data for PDF - Match Bookings.jsx format
         const transformedInvoice = {
           id: invoice.invoice_number || `INV-${invoice.id}`,
+          invoice_number: invoice.invoice_number || `INV-${invoice.id}`, // Add explicit invoice_number field
+          booking_id: invoice.booking_id, // Add explicit booking_id field
+          booking_reference: invoice.booking_reference, // Add booking reference (e.g., BK773337T28)
           invoiceDate: invoice.issued_at || invoice.created_at,
           dueDate: invoice.due_at,
           customerInfo: {
@@ -328,13 +340,20 @@ const Dashboard = () => {
             amount: parseFloat(charge.totalAmount || charge.amount || 0)
           })),
           originalSubtotal: baseAmount,
+          discountPercentage: discountPercentage,
           totalDiscount: discountAmount,
           subtotal: roomTotal,
           additionalTotal: additionalChargesTotal,
-          tax: parseFloat(invoice.tax_amount || 0),
-          total: parseFloat(invoice.total || roomTotal + additionalChargesTotal),
+          additionalChargesTotal: additionalChargesTotal,
+          taxRate: taxRate,
+          tax: taxAmount,
+          total: parseFloat(invoice.total || finalTotal),
           paid: parseFloat(invoice.paid || 0),
           due: parseFloat(invoice.due || 0),
+          paidAmount: parseFloat(invoice.paid || 0),
+          dueAmount: parseFloat(invoice.due || 0),
+          totalPaid: parseFloat(invoice.paid || 0),
+          balanceDue: parseFloat(invoice.due || 0),
           payments: invoice.payments || []
         };
         

@@ -33,6 +33,8 @@ const CreateInvoice = () => {
   };
   const [invoice, setInvoice] = useState({
     id: `INV-${Date.now()}`,
+    invoice_number: `INV-${Date.now()}`, // Add explicit invoice_number
+    booking_id: null, // Will be set if created from a booking
     customerInfo: {
       name: '',
       email: '',

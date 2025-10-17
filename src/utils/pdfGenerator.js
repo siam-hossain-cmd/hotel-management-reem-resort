@@ -3,6 +3,15 @@ import jsPDF from 'jspdf';
 
 export const generateInvoicePDF = async (invoice, elementId = 'invoice-preview') => {
   try {
+    console.log('📄 GENERATING PDF WITH INVOICE DATA:', {
+      invoice_number: invoice.invoice_number,
+      invoiceNumber: invoice.invoiceNumber,
+      id: invoice.id,
+      booking_id: invoice.booking_id,
+      bookingId: invoice.bookingId,
+      booking_reference: invoice.booking_reference
+    });
+    
     // Create a temporary div with the invoice content
     const invoiceElement = document.createElement('div');
     invoiceElement.innerHTML = generateInvoiceHTML(invoice);
@@ -16,20 +25,35 @@ export const generateInvoicePDF = async (invoice, elementId = 'invoice-preview')
     
     document.body.appendChild(invoiceElement);
 
-    // Convert to canvas
+    // Convert to canvas with optimized settings for high quality text
     const canvas = await html2canvas(invoiceElement, {
-      scale: 2,
+      scale: 3, // Increased to 3 for sharper text rendering
       useCORS: true,
       allowTaint: true,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      logging: false,
+      imageTimeout: 0,
+      removeContainer: true,
+      letterRendering: true, // Better text rendering
+      windowWidth: 1200, // Wider for better resolution
+      windowHeight: 1600
     });
 
     // Remove temporary element
     document.body.removeChild(invoiceElement);
 
-    // Create PDF
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
+    // Create PDF with compression
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4',
+      compress: true, // Enable PDF compression
+      putOnlyUsedFonts: true,
+      precision: 16 // Higher precision for better quality
+    });
+    
+    // Use JPEG with higher quality for better text clarity (0.92 for sharp text)
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
     
     const imgWidth = 210;
     const pageHeight = 295;
@@ -37,13 +61,13 @@ export const generateInvoicePDF = async (invoice, elementId = 'invoice-preview')
     let heightLeft = imgHeight;
     let position = 0;
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
     heightLeft -= pageHeight;
 
     while (heightLeft >= 0) {
       position = heightLeft - imgHeight;
       pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pageHeight;
     }
 
@@ -70,22 +94,37 @@ export const printInvoicePDF = async (invoice) => {
     invoiceElement.style.padding = '40px';
     invoiceElement.style.fontFamily = 'Arial, sans-serif';
     
-    document.body.appendChild(invoiceElement);
+    document.body.appendChild(printElement);
 
-    // Convert to canvas
-    const canvas = await html2canvas(invoiceElement, {
-      scale: 2,
+    // Convert to canvas with optimized settings for high quality text
+    const canvas = await html2canvas(printElement, {
+      scale: 3, // Increased to 3 for sharper text rendering
       useCORS: true,
       allowTaint: true,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      logging: false,
+      imageTimeout: 0,
+      removeContainer: true,
+      letterRendering: true, // Better text rendering
+      windowWidth: 1200, // Wider for better resolution
+      windowHeight: 1600
     });
 
     // Remove temporary element
-    document.body.removeChild(invoiceElement);
+    document.body.removeChild(printElement);
 
-    // Create PDF
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF();
+    // Create PDF with compression for printing
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4',
+      compress: true,
+      putOnlyUsedFonts: true,
+      precision: 16 // Higher precision for better quality
+    });
+    
+    // Use JPEG with higher quality for better text clarity
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
     const imgWidth = 210;
     const pageHeight = 295;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -93,13 +132,13 @@ export const printInvoicePDF = async (invoice) => {
 
     let position = 0;
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
     heightLeft -= pageHeight;
 
     while (heightLeft >= 0) {
       position = heightLeft - imgHeight;
       pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pageHeight;
     }
 
@@ -128,64 +167,75 @@ export const printInvoicePDF = async (invoice) => {
 };
 
 const generateInvoiceHTML = (invoice) => {
+  // Helper function to safely get invoice number
+  const getInvoiceNumber = () => {
+    return invoice.invoice_number || invoice.invoiceNumber || invoice.id || 'N/A';
+  };
+  
+  // Helper function to safely get booking reference
+  const getBookingRef = () => {
+    // Priority: booking_reference (e.g., BK773337T28) > booking_id (numeric)
+    return invoice.booking_reference || invoice.bookingReference || 
+           invoice.bookingRef || invoice.booking_id || invoice.bookingId || null;
+  };
+  
   return `
-    <div style="max-width: 800px; margin: 0 auto; padding: 40px; font-family: Arial, sans-serif; color: #333;">
+    <div style="max-width: 800px; margin: 0 auto; padding: 20px; font-family: Arial, sans-serif; color: #333; font-size: 11px;">
       <!-- Header -->
-      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 40px;">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px;">
         <div>
-          <h1 style="color: #1e293b; font-size: 36px; margin: 0;">INVOICE</h1>
-          <p style="color: #64748b; margin: 5px 0;">${invoice.id}</p>
+          <h1 style="color: #1e293b; font-size: 24px; margin: 0;">INVOICE</h1>
         </div>
-        <div style="text-align: right;">
-          <h2 style="color: #3b82f6; margin: 0; font-size: 24px;">Reem Resort</h2>
-          <p style="margin: 5px 0; color: #64748b;">Invoice Generator System</p>
-          <p style="margin: 5px 0; color: #64748b;">contact@reemresort.com</p>
+        <div style="text-align: right; max-width: 350px;">
+          <h2 style="color: #3b82f6; margin: 0 0 4px 0; font-size: 18px;">Reem Resort</h2>
+          <p style="margin: 0; color: #64748b; font-size: 10px; line-height: 1.3;">
+            Block - A, Plot - 87, Hotel Motel Zone, Cox's Bazar, Bangladesh
+          </p>
         </div>
       </div>
 
       <!-- Invoice Details -->
-      <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
         <div>
-          <h3 style="color: #1e293b; margin-bottom: 10px;">Bill To:</h3>
-          <div style="color: #64748b;">
-            <p style="margin: 5px 0; font-weight: bold; color: #1e293b;">${invoice.customerInfo?.name || 'Customer Name'}</p>
-            <p style="margin: 5px 0;">${invoice.customerInfo?.email || ''}</p>
-            <p style="margin: 5px 0;">${invoice.customerInfo?.phone || ''}</p>
-            ${invoice.customerInfo?.nid ? `<p style="margin: 5px 0;"><strong>NID:</strong> ${invoice.customerInfo.nid}</p>` : ''}
-            <p style="margin: 5px 0;">${invoice.customerInfo?.address || ''}</p>
+          <h3 style="color: #1e293b; margin: 0 0 6px 0; font-size: 12px;">Bill To:</h3>
+          <div style="color: #64748b; font-size: 10px;">
+            <p style="margin: 2px 0; font-weight: bold; color: #1e293b;">${invoice.customerInfo?.name || 'Customer Name'}</p>
+            <p style="margin: 2px 0;">${invoice.customerInfo?.email || ''}</p>
+            <p style="margin: 2px 0;">${invoice.customerInfo?.phone || ''}</p>
+            ${invoice.customerInfo?.nid ? `<p style="margin: 2px 0;"><strong>NID:</strong> ${invoice.customerInfo.nid}</p>` : ''}
+            ${invoice.customerInfo?.address ? `<p style="margin: 2px 0;">${invoice.customerInfo.address}</p>` : ''}
           </div>
         </div>
         <div style="text-align: right;">
-          <div style="margin-bottom: 20px;">
-            <p style="margin: 5px 0;"><strong>Invoice Date:</strong> ${new Date(invoice.invoiceDate || Date.now()).toLocaleDateString()}</p>
-            <p style="margin: 5px 0;"><strong>Due Date:</strong> ${new Date(invoice.dueDate || Date.now()).toLocaleDateString()}</p>
-          </div>
+          <p style="margin: 2px 0; font-size: 10px;"><strong>Invoice Date:</strong> ${new Date(invoice.invoiceDate || Date.now()).toLocaleDateString()}</p>
+          <p style="margin: 2px 0; font-size: 10px;"><strong>Invoice No:</strong> ${getInvoiceNumber()}</p>
+          ${getBookingRef() ? `<p style="margin: 2px 0; font-size: 10px;"><strong>Booking Ref:</strong> ${getBookingRef().toString().startsWith('BK') ? getBookingRef() : '#' + getBookingRef()}</p>` : ''}
         </div>
       </div>
 
       <!-- Items Table -->
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
         <thead>
           <tr style="background-color: #f8fafc;">
-            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Room Number</th>
-            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Check-in</th>
-            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Check-out</th>
-            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Nights</th>
-            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Guests</th>
-            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Per Night</th>
-            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Total</th>
+            <th style="padding: 6px 4px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Room</th>
+            <th style="padding: 6px 4px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Check-in</th>
+            <th style="padding: 6px 4px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Check-out</th>
+            <th style="padding: 6px 4px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Nights</th>
+            <th style="padding: 6px 4px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Guests</th>
+            <th style="padding: 6px 4px; text-align: right; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Per Night</th>
+            <th style="padding: 6px 4px; text-align: right; border-bottom: 1px solid #e2e8f0; font-size: 9px;">Total</th>
           </tr>
         </thead>
         <tbody>
           ${(invoice.items || []).map(item => `
             <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber || 'Room'}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkInDate ? new Date(item.checkInDate).toLocaleDateString() : ''}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkOutDate ? new Date(item.checkOutDate).toLocaleDateString() : ''}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights || 0}</td>
-              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount || 1}</td>
-              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.perNightCost || 0).toFixed(2)}</td>
-              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.amount || 0).toFixed(2)}</td>
+              <td style="padding: 5px 4px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber || 'Room'}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkInDate ? new Date(item.checkInDate).toLocaleDateString() : ''}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkOutDate ? new Date(item.checkOutDate).toLocaleDateString() : ''}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights || 0}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount || 1}</td>
+              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.perNightCost || 0).toFixed(0)}</td>
+              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.amount || 0).toFixed(0)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -193,18 +243,18 @@ const generateInvoiceHTML = (invoice) => {
 
       ${invoice.additionalCharges && invoice.additionalCharges.length > 0 && invoice.additionalCharges.some(charge => charge.description && charge.amount > 0) ? `
       <!-- Additional Charges -->
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10px;">
         <thead>
           <tr style="background-color: #fef3c7;">
-            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #f59e0b;">Additional Charges</th>
-            <th style="padding: 12px; text-align: right; border-bottom: 2px solid #f59e0b;">Amount</th>
+            <th style="padding: 5px 4px; text-align: left; border-bottom: 1px solid #f59e0b; font-size: 9px;">Additional Charges</th>
+            <th style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f59e0b; font-size: 9px;">Amount</th>
           </tr>
         </thead>
         <tbody>
           ${invoice.additionalCharges.filter(charge => charge.description && charge.amount > 0).map(charge => `
             <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #f1f5f9;">${charge.description}</td>
-              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${charge.amount.toFixed(2)}</td>
+              <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">${charge.description}</td>
+              <td style="padding: 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${charge.amount.toFixed(0)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -212,48 +262,48 @@ const generateInvoiceHTML = (invoice) => {
       ` : ''}
 
       <!-- Totals -->
-      <div style="display: flex; justify-content: flex-end; margin-bottom: 40px;">
-        <div style="width: 350px;">
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+        <div style="width: 300px; font-size: 10px;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Original Room Charges:</span>
-            <span>৳${(invoice.originalSubtotal || 0).toFixed(2)}</span>
+            <span>৳${(invoice.originalSubtotal || 0).toFixed(0)}</span>
           </div>
           ${(invoice.totalDiscount && invoice.totalDiscount > 0) ? `
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; color: #dc2626;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9; color: #dc2626;">
             <span>Total Discount Applied:</span>
-            <span>-৳${invoice.totalDiscount.toFixed(2)}</span>
+            <span>-৳${invoice.totalDiscount.toFixed(0)}</span>
           </div>
           ` : ''}
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Room Charges After Discount:</span>
-            <span>৳${(invoice.subtotal || 0).toFixed(2)}</span>
+            <span>৳${(invoice.subtotal || 0).toFixed(0)}</span>
           </div>
           ${invoice.additionalTotal && invoice.additionalTotal > 0 ? `
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Additional Charges:</span>
-            <span>৳${(invoice.additionalTotal || 0).toFixed(2)}</span>
+            <span>৳${(invoice.additionalTotal || 0).toFixed(0)}</span>
           </div>
           ` : ''}
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 2px solid #e2e8f0; font-weight: 600;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600;">
             <span>Subtotal (Before VAT):</span>
-            <span>৳${((invoice.subtotal || 0) + (invoice.additionalTotal || 0)).toFixed(2)}</span>
+            <span>৳${((invoice.subtotal || 0) + (invoice.additionalTotal || 0)).toFixed(0)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>VAT (${invoice.taxRate || 0}%):</span>
-            <span>৳${(invoice.tax || invoice.taxAmount || 0).toFixed(2)}</span>
+            <span>৳${(invoice.tax || invoice.taxAmount || 0).toFixed(0)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 18px; border-top: 2px solid #3b82f6; border-bottom: 2px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 12px; border-top: 1px solid #3b82f6; border-bottom: 1px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
             <span>Final Total Amount:</span>
-            <span>৳${(invoice.total || 0).toFixed(2)}</span>
+            <span>৳${(invoice.total || 0).toFixed(0)}</span>
           </div>
           ${invoice.totalPaid && invoice.totalPaid > 0 ? `
-          <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #059669; font-weight: 600;">
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; color: #059669; font-weight: 600;">
             <span>Total Paid:</span>
-            <span>৳${(invoice.totalPaid || 0).toFixed(2)}</span>
+            <span>৳${(invoice.totalPaid || 0).toFixed(0)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 12px 0; font-weight: bold; font-size: 16px; border-top: 2px solid #e2e8f0; color: ${invoice.dueAmount > 0 ? '#dc2626' : '#059669'};">
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 11px; border-top: 1px solid #e2e8f0; color: ${invoice.dueAmount > 0 ? '#dc2626' : '#059669'};">
             <span>Due Amount:</span>
-            <span>৳${invoice.dueAmount.toFixed(2)}</span>
+            <span>৳${invoice.dueAmount.toFixed(0)}</span>
           </div>
           ` : ''}
         </div>
@@ -261,24 +311,24 @@ const generateInvoiceHTML = (invoice) => {
 
       ${invoice.payments && invoice.payments.length > 0 ? `
       <!-- Payment History -->
-      <div style="margin-bottom: 30px;">
-        <h3 style="color: #1e293b; margin-bottom: 15px;">Payment History:</h3>
-        <table style="width: 100%; border-collapse: collapse;">
+      <div style="margin-bottom: 10px;">
+        <h3 style="color: #1e293b; margin: 0 0 6px 0; font-size: 11px;">Payment History:</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9px;">
           <thead>
             <tr style="background-color: #f0f9ff;">
-              <th style="padding: 10px; text-align: left; border-bottom: 1px solid #bae6fd;">Date</th>
-              <th style="padding: 10px; text-align: left; border-bottom: 1px solid #bae6fd;">Method</th>
-              <th style="padding: 10px; text-align: left; border-bottom: 1px solid #bae6fd;">Description</th>
-              <th style="padding: 10px; text-align: right; border-bottom: 1px solid #bae6fd;">Amount</th>
+              <th style="padding: 4px; text-align: left; border-bottom: 1px solid #bae6fd;">Date</th>
+              <th style="padding: 4px; text-align: left; border-bottom: 1px solid #bae6fd;">Method</th>
+              <th style="padding: 4px; text-align: left; border-bottom: 1px solid #bae6fd;">Description</th>
+              <th style="padding: 4px; text-align: right; border-bottom: 1px solid #bae6fd;">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${invoice.payments.map(payment => `
               <tr>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${new Date(payment.date).toLocaleDateString()}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${payment.method.replace('_', ' ')}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #f1f5f9;">${payment.description}</td>
-                <td style="padding: 8px 10px; text-align: right; border-bottom: 1px solid #f1f5f9; color: #059669; font-weight: 600;">৳${payment.amount.toFixed(2)}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${new Date(payment.date).toLocaleDateString()}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${payment.method.replace('_', ' ')}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${payment.description}</td>
+                <td style="padding: 3px 4px; text-align: right; border-bottom: 1px solid #f1f5f9; color: #059669; font-weight: 600;">৳${payment.amount.toFixed(0)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -288,27 +338,39 @@ const generateInvoiceHTML = (invoice) => {
 
       <!-- Notes and Terms -->
       ${invoice.notes ? `
-        <div style="margin-bottom: 30px;">
-          <h3 style="color: #1e293b; margin-bottom: 10px;">Notes:</h3>
-          <p style="color: #64748b; line-height: 1.6;">${invoice.notes}</p>
+        <div style="margin-bottom: 8px;">
+          <h3 style="color: #1e293b; margin: 0 0 4px 0; font-size: 10px;">Notes:</h3>
+          <p style="color: #64748b; line-height: 1.4; font-size: 9px;">${invoice.notes}</p>
         </div>
       ` : ''}
 
-      <div style="margin-bottom: 30px;">
-        <h3 style="color: #1e293b; margin-bottom: 10px;">Terms & Conditions:</h3>
-        <p style="color: #64748b; line-height: 1.6;">${invoice.terms}</p>
+      <div style="margin-bottom: 10px;">
+        <h3 style="color: #1e293b; margin: 0 0 4px 0; font-size: 10px;">Terms & Conditions</h3>
+        <p style="color: #64748b; line-height: 1.3; font-size: 8px;">
+          All payments are due as per the terms stated and are non-transferable. Cancellations or no-shows are subject to applicable fees as outlined in the hotel policy. Guests shall be held liable for any damage, loss, or misconduct occurring during their stay. Smoking in prohibited areas will incur a penalty charge. The hotel accepts no responsibility for loss of personal belongings. Early check-in and late check-out are subject to prior approval and additional charges.
+        </p>
       </div>
 
       <!-- Footer -->
-      <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; color: #64748b; font-size: 14px;">
-        <p>Thank you for your business!</p>
-        <p>For any questions regarding this invoice, please contact us at contact@reemresort.com</p>
+      <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px; color: #64748b; font-size: 9px;">
+        <p style="margin: 4px 0; font-weight: 600; color: #1e293b; font-size: 10px;">Thank you for your business!</p>
+        <p style="margin: 2px 0; line-height: 1.3;">
+          For any questions, contact us at <strong style="color: #3b82f6;">contact@reemresort.com</strong> | <strong style="color: #3b82f6;">+880 1756-989693</strong>
+        </p>
       </div>
     </div>
   `;
 };
 
 export const previewInvoice = (invoice) => {
+  console.log('👁️ PREVIEWING INVOICE:', {
+    invoice_number: invoice.invoice_number,
+    invoiceNumber: invoice.invoiceNumber,
+    id: invoice.id,
+    booking_id: invoice.booking_id,
+    bookingId: invoice.bookingId
+  });
+  
   const previewWindow = window.open('', '_blank', 'width=800,height=600');
   
   if (!previewWindow) {

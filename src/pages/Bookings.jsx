@@ -34,6 +34,14 @@ const Bookings = () => {
     notes: ''
   });
   const [sortConfig, setSortConfig] = useState({ key: 'checkInDate', direction: 'descending' });
+  const [showCheckInOutModal, setShowCheckInOutModal] = useState(false);
+  const [checkInOutData, setCheckInOutData] = useState({
+    booking: null,
+    action: '', // 'check-in' or 'check-out'
+    expectedDate: null,
+    currentDate: null,
+    hasWarning: false
+  });
 
   // Format date to dd/mm/yyyy
   const formatDate = (dateString) => {
@@ -91,7 +99,7 @@ const Bookings = () => {
             paymentStatus: paymentStatus,
             paidAmount: paidAmount,
             dueBalance: dueBalance,
-            status: (booking.status || 'confirmed').toLowerCase(),
+            status: (booking.status || 'confirmed').toLowerCase().replace(/_/g, '-'),
             createdAt: booking.created_at,
             createdBy: booking.created_by || 'System',
             currency: booking.currency || 'BDT',
@@ -187,17 +195,55 @@ const Bookings = () => {
 
   const handleQuickStatusChange = async (bookingId, newStatus, bookingData) => {
     try {
-      let result;
+      // Get current date (today) in YYYY-MM-DD format
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
       
-      // Show confirmation for critical actions
+      // Handle check-in with date validation
       if (newStatus === 'checked-in') {
-        if (!confirm(`Check in guest for Room ${bookingData.roomNumber}?`)) return;
-      } else if (newStatus === 'checked-out') {
-        if (!confirm(`Check out guest from Room ${bookingData.roomNumber}?`)) return;
+        const checkInDate = new Date(bookingData.checkInDate);
+        checkInDate.setHours(0, 0, 0, 0);
+        const checkInStr = checkInDate.toISOString().split('T')[0];
+        
+        // Check if check-in date matches today's date
+        if (checkInStr !== todayStr) {
+          // Show warning modal
+          setCheckInOutData({
+            booking: bookingData,
+            action: 'check-in',
+            expectedDate: checkInDate,
+            currentDate: today,
+            hasWarning: true
+          });
+          setShowCheckInOutModal(true);
+          return;
+        }
+      } 
+      // Handle check-out with date validation
+      else if (newStatus === 'checked-out') {
+        const checkOutDate = new Date(bookingData.checkOutDate);
+        checkOutDate.setHours(0, 0, 0, 0);
+        const checkOutStr = checkOutDate.toISOString().split('T')[0];
+        
+        // Check if check-out date matches today's date
+        if (checkOutStr !== todayStr) {
+          // Show warning modal
+          setCheckInOutData({
+            booking: bookingData,
+            action: 'check-out',
+            expectedDate: checkOutDate,
+            currentDate: today,
+            hasWarning: true
+          });
+          setShowCheckInOutModal(true);
+          return;
+        }
       }
       
       console.log(`Attempting to change status to: ${newStatus} for booking: ${bookingId}`);
       
+      let result;
       switch (newStatus) {
         case 'confirmed':
           result = await bookingService.confirmBooking(bookingId);
@@ -532,6 +578,9 @@ const Bookings = () => {
   // Transform invoice data from API to match PDF generator format
   const transformInvoiceData = (invoice) => {
     console.log('🔍 RAW INVOICE DATA:', invoice); // Enhanced debug log
+    console.log('📋 Invoice Number:', invoice.invoice_number);
+    console.log('🔖 Booking ID:', invoice.booking_id);
+    console.log('🎫 Booking Reference:', invoice.booking_reference);
     console.log('📋 Customer Info:', {
       first_name: invoice.first_name,
       last_name: invoice.last_name,
@@ -566,6 +615,7 @@ const Bookings = () => {
 
     // Calculate per night cost
     const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || invoice.total || 0);
+    const discountPercentage = parseFloat(invoice.discount_percentage || 0);
     const discountAmount = parseFloat(invoice.discount_amount || 0);
     const roomTotal = baseAmount - discountAmount;
     const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
@@ -574,9 +624,41 @@ const Bookings = () => {
     const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
       sum + parseFloat(c.totalAmount || c.amount || 0), 0
     );
+    
+    // 🆕 Use stored tax data from database
+    // Prefer booking's tax fields (more accurate), fallback to invoice's tax fields
+    const storedTaxRate = parseFloat(invoice.booking_tax_rate || invoice.tax_rate || 0);
+    const storedTaxAmount = parseFloat(invoice.booking_tax_amount || invoice.tax_amount || 0);
+    const subtotalBeforeTax = parseFloat(invoice.subtotal_amount || roomTotal);
+    
+    let taxRate = storedTaxRate;
+    let taxAmount = storedTaxAmount;
+    
+    // If tax_amount exists but not tax_rate, calculate rate
+    if (taxAmount > 0 && taxRate === 0 && subtotalBeforeTax > 0) {
+      taxRate = (taxAmount / subtotalBeforeTax) * 100;
+    }
+    
+    const finalTotal = parseFloat(invoice.total || invoice.booking_total || 0);
+    
+    console.log('💰 TAX CALCULATION:', {
+      subtotalBeforeTax,
+      storedTaxRate,
+      storedTaxAmount,
+      taxRate,
+      taxAmount,
+      finalTotal,
+      booking_tax_rate: invoice.booking_tax_rate,
+      booking_tax_amount: invoice.booking_tax_amount,
+      invoice_tax_rate: invoice.tax_rate,
+      invoice_tax_amount: invoice.tax_amount
+    });
 
     return {
       id: invoice.invoice_number || `INV-${invoice.id}`,
+      invoice_number: invoice.invoice_number || `INV-${invoice.id}`, // Add explicit invoice_number field
+      booking_id: invoice.booking_id, // Add explicit booking_id field
+      booking_reference: invoice.booking_reference, // Add booking reference (e.g., BK773337T28)
       invoiceDate: invoice.invoice_date || invoice.issued_at || invoice.created_at,
       dueDate: invoice.due_date || invoice.due_at,
       customerInfo: {
@@ -612,17 +694,22 @@ const Bookings = () => {
         amount: parseFloat(charge.totalAmount || charge.amount || 0)
       })),
       originalSubtotal: baseAmount,
+      discountPercentage: discountPercentage,
       totalDiscount: discountAmount,
       subtotal: roomTotal,
       additionalChargesTotal: additionalChargesTotal,
-      tax: parseFloat(invoice.tax_amount || 0),
-      total: parseFloat(invoice.total || baseAmount + additionalChargesTotal),
+      additionalTotal: additionalChargesTotal,
+      taxRate: taxRate,
+      tax: taxAmount,
+      total: parseFloat(invoice.total || finalTotal),
       // Calculate total paid from payments array if not provided
       paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
       balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
       // Add aliases for PDF template compatibility
       totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
       dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
+      paid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      due: parseFloat(invoice.due || invoice.due_amount || 0),
       notes: invoice.notes || '',
       terms: invoice.terms || 'Payment due upon receipt.',
       payments: (invoice.payments || []).map(payment => {
@@ -817,8 +904,63 @@ const Bookings = () => {
   // Handle quick checkout from priority section
   const handleCheckOut = async (booking) => {
     if (window.confirm(`Check out ${booking.guestName} from Room ${booking.roomNumber}?`)) {
-      await handleStatusChange(booking.id, 'checked-out');
+      await handleQuickStatusChange(booking.id, 'checked-out', booking);
     }
+  };
+
+  // Handle check-in/check-out confirmation from modal
+  const handleConfirmCheckInOut = async () => {
+    const { booking, action } = checkInOutData;
+    
+    if (!booking) return;
+    
+    try {
+      let result;
+      
+      if (action === 'check-in') {
+        result = await bookingService.checkIn(booking.id);
+      } else if (action === 'check-out') {
+        result = await bookingService.checkOut(booking.id);
+      }
+
+      if (result && result.success) {
+        await loadBookings();
+        alert(`Successfully ${action === 'check-in' ? 'checked in' : 'checked out'} guest for Room ${booking.roomNumber}`);
+        setShowCheckInOutModal(false);
+        setCheckInOutData({
+          booking: null,
+          action: '',
+          expectedDate: null,
+          currentDate: null,
+          hasWarning: false
+        });
+      } else {
+        let errorMsg = `Failed to ${action}`;
+        if (result && result.error) {
+          if (typeof result.error === 'string') {
+            errorMsg = result.error;
+          } else if (result.error.message) {
+            errorMsg = result.error.message;
+          }
+        }
+        alert(errorMsg);
+      }
+    } catch (error) {
+      console.error(`Error during ${action}:`, error);
+      alert(`Error: ${error.message || 'Unknown error occurred'}`);
+    }
+  };
+
+  // Handle cancel check-in/check-out
+  const handleCancelCheckInOut = () => {
+    setShowCheckInOutModal(false);
+    setCheckInOutData({
+      booking: null,
+      action: '',
+      expectedDate: null,
+      currentDate: null,
+      hasWarning: false
+    });
   };
 
   if (loading) {
@@ -1578,6 +1720,81 @@ const Bookings = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Check-In/Check-Out Confirmation Modal */}
+      {showCheckInOutModal && checkInOutData.booking && (
+        <div className="modal-overlay">
+          <div className="delete-modal checkin-checkout-modal">
+            <div className="modal-header">
+              <h3>{checkInOutData.action === 'check-in' ? 'Check In Confirmation' : 'Check Out Confirmation'}</h3>
+              <button className="close-btn" onClick={handleCancelCheckInOut}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="warning-icon" style={{ color: checkInOutData.hasWarning ? '#f59e0b' : '#10b981' }}>
+                {checkInOutData.hasWarning ? <AlertTriangle size={48} /> : <CheckCircle size={48} />}
+              </div>
+              
+              {checkInOutData.hasWarning && (
+                <div className="warning-message">
+                  <h4>⚠️ Date Mismatch Warning</h4>
+                  <p>The {checkInOutData.action === 'check-in' ? 'check-in' : 'check-out'} date does not match today's date.</p>
+                </div>
+              )}
+              
+              <div className="booking-details">
+                <p><strong>Guest:</strong> {checkInOutData.booking.guestName}</p>
+                <p><strong>Room:</strong> {checkInOutData.booking.roomNumber}</p>
+                <p><strong>Expected {checkInOutData.action === 'check-in' ? 'Check-In' : 'Check-Out'} Date:</strong> {formatDate(checkInOutData.expectedDate)}</p>
+                <p><strong>Today's Date:</strong> {formatDate(checkInOutData.currentDate)}</p>
+              </div>
+              
+              {checkInOutData.hasWarning && (
+                <>
+                  {checkInOutData.action === 'check-in' && checkInOutData.expectedDate > checkInOutData.currentDate && (
+                    <div className="info-box early-checkin">
+                      <p><strong>Early Check-In:</strong> This is an early check-in. The guest is checking in before the scheduled date.</p>
+                    </div>
+                  )}
+                  {checkInOutData.action === 'check-in' && checkInOutData.expectedDate < checkInOutData.currentDate && (
+                    <div className="info-box late-checkin">
+                      <p><strong>Late Check-In:</strong> This is a late check-in. The guest is checking in after the scheduled date.</p>
+                    </div>
+                  )}
+                  {checkInOutData.action === 'check-out' && checkInOutData.expectedDate > checkInOutData.currentDate && (
+                    <div className="info-box early-checkout">
+                      <p><strong>Early Check-Out:</strong> The guest is checking out before the scheduled date.</p>
+                    </div>
+                  )}
+                  {checkInOutData.action === 'check-out' && checkInOutData.expectedDate < checkInOutData.currentDate && (
+                    <div className="info-box late-checkout">
+                      <p><strong>Late Check-Out:</strong> The guest is checking out after the scheduled date.</p>
+                    </div>
+                  )}
+                  <p className="warning-text">Are you sure you want to proceed with this {checkInOutData.action}?</p>
+                </>
+              )}
+              
+              {!checkInOutData.hasWarning && (
+                <p className="success-text">Dates match! Proceed with {checkInOutData.action}?</p>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={handleCancelCheckInOut}>
+                Cancel
+              </button>
+              <button 
+                className={`btn ${checkInOutData.action === 'check-in' ? 'btn-primary' : 'btn-success'}`} 
+                onClick={handleConfirmCheckInOut}
+              >
+                {checkInOutData.action === 'check-in' ? <LogIn size={20} /> : <LogOut size={20} />}
+                Confirm {checkInOutData.action === 'check-in' ? 'Check In' : 'Check Out'}
+              </button>
             </div>
           </div>
         </div>
