@@ -562,6 +562,7 @@ router.get('/:id/summary', async (req, res) => {
 
     // Calculate totals
     const baseAmount = parseFloat(booking.base_amount || booking.total_amount || 0);
+    const discountPercentage = parseFloat(booking.discount_percentage || 0);
     const discountAmount = parseFloat(booking.discount_amount || 0);
     const roomTotal = baseAmount - discountAmount;
     
@@ -572,7 +573,14 @@ router.get('/:id/summary', async (req, res) => {
     }, 0);
 
     const subtotal = roomTotal + additionalCharges;
-    const vat = subtotal * 0.0; // 0% VAT for now, can be configured
+    
+    // Get VAT/Tax from booking data (use stored tax_rate and tax_amount)
+    const taxRate = parseFloat(booking.tax_rate || 0);
+    const taxAmount = parseFloat(booking.tax_amount || 0);
+    
+    // If tax_amount is stored, use it; otherwise calculate from rate
+    const vat = taxAmount > 0 ? taxAmount : (subtotal * (taxRate / 100));
+    
     const grandTotal = subtotal + vat;
 
     const totalPaid = payments.reduce((sum, payment) => {
@@ -621,10 +629,12 @@ router.get('/:id/summary', async (req, res) => {
         })),
         totals: {
           baseAmount,
+          discountPercentage,
           discountAmount,
           roomTotal,
           additionalCharges,
           subtotal,
+          taxRate,
           vat,
           grandTotal,
           totalPaid,

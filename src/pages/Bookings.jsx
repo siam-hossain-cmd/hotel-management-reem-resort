@@ -9,7 +9,7 @@ import { previewInvoice } from '../utils/pdfGenerator';
 import '../booking.css';
 
 const Bookings = () => {
-  const { canPerformAction } = useAuth();
+  const { canPerformAction, hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [bookings, setBookings] = useState([]);
@@ -18,6 +18,7 @@ const Bookings = () => {
   const [bookingToDelete, setBookingToDelete] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [bookingToView, setBookingToView] = useState(null);
+  const [showAccessDeniedModal, setShowAccessDeniedModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [paymentData, setPaymentData] = useState({
@@ -131,6 +132,13 @@ const Bookings = () => {
 
   const handleDeleteClick = (booking) => {
     console.log('Delete booking clicked:', booking);
+    
+    // Check if user has permission to delete bookings
+    if (!hasPermission('delete_booking')) {
+      setShowAccessDeniedModal(true);
+      return;
+    }
+    
     setBookingToDelete(booking);
     setShowDeleteModal(true);
   };
@@ -1156,8 +1164,8 @@ const Bookings = () => {
                     )}
                     
                     <button 
-                      className="action-btn delete" 
-                      title="Delete"
+                      className={`action-btn delete ${!hasPermission('delete_booking') ? 'disabled' : ''}`}
+                      title={hasPermission('delete_booking') ? "Delete" : "Access Denied - Admin Only"}
                       onClick={() => handleDeleteClick(booking)}
                     >
                       <Trash2 size={16} /> Delete
@@ -1183,6 +1191,54 @@ const Bookings = () => {
           </div>
         )}
       </div>
+
+      {/* Access Denied Modal */}
+      {showAccessDeniedModal && (
+        <div className="modal-overlay">
+          <div className="access-denied-modal">
+            <div className="modal-header access-denied-header">
+              <div className="header-icon-wrapper">
+                <AlertTriangle size={32} />
+              </div>
+              <div>
+                <h3>Access Denied</h3>
+                <p className="modal-subtitle">Insufficient Permissions</p>
+              </div>
+              <button className="close-btn" onClick={() => setShowAccessDeniedModal(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="access-denied-content">
+                <div className="access-denied-icon">
+                  <XCircle size={64} />
+                </div>
+                <h4>You do not have permission to delete bookings</h4>
+                <p className="access-denied-message">
+                  Only administrators can delete bookings from the system.
+                </p>
+                <div className="access-denied-info">
+                  <p><strong>Your Role:</strong> Front Desk</p>
+                  <p><strong>Required Permission:</strong> Delete Bookings (Admin Only)</p>
+                </div>
+                <div className="access-denied-help">
+                  <p>If you need to delete this booking, please contact:</p>
+                  <ul>
+                    <li>System Administrator</li>
+                    <li>Hotel Manager</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={() => setShowAccessDeniedModal(false)}>
+                <CheckCircle size={20} />
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
@@ -1447,10 +1503,36 @@ const Bookings = () => {
                   <div className="card-content financial-content">
                     {/* Compact Charges List */}
                     <div className="financial-charges-list">
-                      <div className="charge-line-item">
+                      {/* Original Room Charges */}
+                      {bookingToView.totals.baseAmount && bookingToView.totals.baseAmount > 0 && (
+                        <div className="charge-line-item">
+                          <span className="charge-line-label">
+                            <span className="charge-line-icon">🏷️</span>
+                            Original Room Price
+                          </span>
+                          <span className="charge-line-value">৳{bookingToView.totals.baseAmount?.toFixed(2)}</span>
+                        </div>
+                      )}
+                      
+                      {/* Discount Information */}
+                      {bookingToView.totals.discountAmount > 0 && (
+                        <div className="charge-line-item discount-item">
+                          <span className="charge-line-label">
+                            <span className="charge-line-icon">🎯</span>
+                            Discount
+                            {bookingToView.totals.discountPercentage > 0 && (
+                              <span className="discount-badge">({bookingToView.totals.discountPercentage}%)</span>
+                            )}
+                          </span>
+                          <span className="charge-line-value discount-value">-৳{bookingToView.totals.discountAmount?.toFixed(2)}</span>
+                        </div>
+                      )}
+                      
+                      {/* Room Charges After Discount */}
+                      <div className="charge-line-item room-total-item">
                         <span className="charge-line-label">
                           <span className="charge-line-icon">🛏️</span>
-                          Room Charges
+                          Room Charges {bookingToView.totals.discountAmount > 0 ? '(After Discount)' : ''}
                         </span>
                         <span className="charge-line-value">৳{bookingToView.totals.roomTotal?.toFixed(2)}</span>
                       </div>
@@ -1466,12 +1548,15 @@ const Bookings = () => {
                       )}
                       
                       {bookingToView.totals.vat > 0 && (
-                        <div className="charge-line-item">
+                        <div className="charge-line-item vat-item">
                           <span className="charge-line-label">
                             <span className="charge-line-icon">📊</span>
-                            VAT
+                            VAT/Tax
+                            {bookingToView.totals.taxRate > 0 && (
+                              <span className="tax-badge">({bookingToView.totals.taxRate}%)</span>
+                            )}
                           </span>
-                          <span className="charge-line-value">৳{bookingToView.totals.vat?.toFixed(2)}</span>
+                          <span className="charge-line-value vat-value">৳{bookingToView.totals.vat?.toFixed(2)}</span>
                         </div>
                       )}
                     </div>

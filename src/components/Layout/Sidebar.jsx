@@ -15,19 +15,28 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  Plus
+  Plus,
+  LogOut,
+  User
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Sidebar = () => {
   const location = useLocation();
-  const { canPerformAction, isMasterAdmin, user, ROLES } = useAuth();
+  const { canPerformAction, isMasterAdmin, user, logout, ROLES } = useAuth();
   
   // State for managing open/closed submenus
   const [openMenus, setOpenMenus] = useState({
     bookings: false,
     invoices: false
   });
+
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      await logout();
+      window.location.href = '/';
+    }
+  };
 
   // Auto-expand submenu if user is on a submenu page
   useEffect(() => {
@@ -183,6 +192,23 @@ const Sidebar = () => {
           }
         })}
       </nav>
+      
+      {/* User Info & Logout Section */}
+      <div className="sidebar-footer">
+        <div className="user-info">
+          <div className="user-avatar">
+            <User size={20} />
+          </div>
+          <div className="user-details">
+            <div className="user-name">{user?.email?.split('@')[0] || 'User'}</div>
+            <div className="user-role">{user?.role || 'Admin'}</div>
+          </div>
+        </div>
+        <button className="logout-btn" onClick={handleLogout} title="Logout">
+          <LogOut size={20} />
+          <span>Logout</span>
+        </button>
+      </div>
     </div>
   );
 };

@@ -29,11 +29,14 @@ body {
   top: 0;
   z-index: 1000;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
   padding: 1.5rem;
   border-bottom: 1px solid #475569;
+  flex-shrink: 0;
 }
 
 .sidebar-header h2 {
@@ -44,6 +47,8 @@ body {
 
 .sidebar-nav {
   padding: 1rem 0;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -175,6 +180,90 @@ body {
 .admin-badge {
   color: #fbbf24;
   margin-left: auto;
+}
+
+/* Sidebar Footer - User Info & Logout */
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 1rem;
+  background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 42, 0.8) 20%, #0f172a 100%);
+  border-top: 1px solid #334155;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(51, 65, 85, 0.5);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+
+.user-role {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: capitalize;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.logout-btn:active {
+  transform: translateY(0);
+}
+
+.logout-btn svg {
+  flex-shrink: 0;
 }
 
 /* Main Content */

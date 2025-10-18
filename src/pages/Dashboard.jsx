@@ -16,7 +16,6 @@ import {
   PieChart,
   Activity,
   Bell,
-  LogOut,
   X,
   User,
   CreditCard,
@@ -25,12 +24,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { categorizeRoomsByDate } from '../utils/roomAvailability';
+import { categorizeRoomsByDate, isDateInBookingRange, isValidBookingStatus } from '../utils/roomAvailability';
 import { previewInvoice } from '../utils/pdfGenerator';
 import '../booking.css';
 
 const Dashboard = () => {
-  const { user, hasPermission, isAdmin, logout } = useAuth();
+  const { user, hasPermission, isAdmin } = useAuth();
   const [dashboardData, setDashboardData] = useState({
     roomStats: {
       totalRooms: 0,
@@ -75,45 +74,62 @@ const Dashboard = () => {
     notes: ''
   });
   
-  const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      try {
-        await logout();
-      } catch (error) {
-        console.error('Logout failed:', error);
-        alert('Logout failed. Please try again.');
-      }
-    }
-  };
-
   const handleOccupiedRoomClick = async (room) => {
     try {
+      console.log('🏠 Clicked on room:', room);
+      console.log('📅 Selected date:', selectedDate);
+      
       // Fetch all bookings
       const bookingsResult = await api.getBookings();
       if (!bookingsResult.success) {
+        console.error('❌ Failed to load bookings:', bookingsResult);
         alert('Failed to load booking details');
         return;
       }
 
       const bookings = bookingsResult.bookings;
-      const selectedDateStr = selectedDate.toISOString().split('T')[0];
+      console.log('📋 Total bookings fetched:', bookings.length);
 
       // Find the booking for this room on the selected date
       const roomBooking = bookings.find(booking => {
-        const checkinDate = new Date(booking.checkin_date).toISOString().split('T')[0];
-        const checkoutDate = new Date(booking.checkout_date).toISOString().split('T')[0];
-        const isDateInRange = selectedDateStr >= checkinDate && selectedDateStr < checkoutDate;
-        const isRoomMatch = booking.room_id === room.id;
-        // Normalize status for comparison (convert underscores to hyphens)
-        const normalizedStatus = (booking.status || '').toLowerCase().replace(/_/g, '-');
-        const isActive = normalizedStatus === 'confirmed' || normalizedStatus === 'checked-in';
+        // Match by room_number
+        const isRoomMatch = booking.room_number === room.room_number;
+        
+        // Check if the selected date falls within the booking range
+        const isDateInRange = isDateInBookingRange(
+          selectedDate,
+          booking.checkin_date,
+          booking.checkout_date
+        );
+        
+        // Check if booking status is valid (confirmed or checked-in)
+        const isActive = isValidBookingStatus(booking.status);
+        
+        console.log(`🔍 Checking booking ${booking.booking_reference}:`, {
+          roomMatch: isRoomMatch,
+          bookingRoom: booking.room_number,
+          clickedRoom: room.room_number,
+          dateInRange: isDateInRange,
+          checkinDate: booking.checkin_date,
+          checkoutDate: booking.checkout_date,
+          selectedDate: selectedDate.toISOString().split('T')[0],
+          isActive,
+          status: booking.status,
+          allMatch: isRoomMatch && isDateInRange && isActive
+        });
         
         return isRoomMatch && isDateInRange && isActive;
       });
 
+      console.log('🎯 Found booking:', roomBooking);
+
       if (roomBooking) {
+        console.log('✅ Loading booking summary for ID:', roomBooking.id);
         // Fetch detailed booking information including charges and payments
         const bookingSummary = await api.getBookingSummary(roomBooking.id);
+        
+        console.log('📊 Booking summary:', bookingSummary);
+        console.log('📊 Booking summary:', bookingSummary);
         
         if (bookingSummary.success) {
           const detailedBooking = {
@@ -137,16 +153,20 @@ const Dashboard = () => {
             totals: bookingSummary.summary.totals
           };
           
+          console.log('✨ Detailed booking:', detailedBooking);
+          
           setSelectedRoomBooking(detailedBooking);
           setShowBookingModal(true);
         } else {
+          console.error('❌ Failed to load booking summary:', bookingSummary);
           alert('Failed to load booking summary');
         }
       } else {
+        console.warn('⚠️ No active booking found');
         alert('No active booking found for this room on the selected date');
       }
     } catch (error) {
-      console.error('Error fetching booking details:', error);
+      console.error('💥 Error fetching booking details:', error);
       alert('Error loading booking details');
     }
   };
@@ -714,15 +734,6 @@ const Dashboard = () => {
                 {getUnreadCount() > 0 && (
                   <span className="notification-badge">{getUnreadCount()}</span>
                 )}
-              </button>
-
-              {/* Logout Button */}
-              <button 
-                className="action-btn logout-btn"
-                onClick={handleLogout}
-                title="Logout"
-              >
-                <LogOut size={18} />
               </button>
             </div>
 

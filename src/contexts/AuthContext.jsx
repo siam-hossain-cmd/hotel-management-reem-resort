@@ -195,9 +195,10 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.CHECKOUT_GUESTS,
     PERMISSIONS.MANAGE_PAYMENTS,
     PERMISSIONS.GENERATE_INVOICE,
-    PERMISSIONS.VIEW_REPORTS, // Added: Admin should be able to view reports
+    PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.CREATE_REPORTS,
-    PERMISSIONS.EXPORT_REPORTS
+    PERMISSIONS.EXPORT_REPORTS,
+    PERMISSIONS.MANAGE_ROOM_INVENTORY
   ],
   
 
@@ -372,7 +373,12 @@ export const AuthProvider = ({ children }) => {
       'canViewReports': PERMISSIONS.VIEW_REPORTS,
       'canCreateReports': PERMISSIONS.CREATE_REPORTS,
       'canManageUsers': PERMISSIONS.MANAGE_ROLES,
-      'canCreateUsers': PERMISSIONS.CREATE_USERS
+      'canCreateUsers': PERMISSIONS.CREATE_USERS,
+      'canViewBookings': PERMISSIONS.VIEW_BOOKINGS,
+      'canCreateBookings': PERMISSIONS.CREATE_BOOKING,
+      'canEditBookings': PERMISSIONS.EDIT_BOOKINGS,
+      'canDeleteBookings': PERMISSIONS.DELETE_BOOKING,
+      'canManageBookings': PERMISSIONS.MANAGE_BOOKINGS
     };
     
     // Convert legacy permission to actual permission if needed
@@ -548,6 +554,13 @@ export const AuthProvider = ({ children }) => {
       'canDeleteInvoices': hasPermission(PERMISSIONS.DELETE_INVOICES),
       'canDeleteRooms': hasPermission(PERMISSIONS.DELETE_ROOMS),
       'canDeleteCustomers': hasPermission(PERMISSIONS.DELETE_CUSTOMERS),
+      
+      // Booking permissions
+      'canViewBookings': hasPermission(PERMISSIONS.VIEW_BOOKINGS),
+      'canCreateBookings': hasPermission(PERMISSIONS.CREATE_BOOKING),
+      'canEditBookings': hasPermission(PERMISSIONS.EDIT_BOOKINGS),
+      'canDeleteBookings': hasPermission(PERMISSIONS.DELETE_BOOKING),
+      'canManageBookings': hasPermission(PERMISSIONS.MANAGE_BOOKINGS),
       
       // Management permissions
       'canManageRooms': hasPermission(PERMISSIONS.MANAGE_ROOM_INVENTORY),
