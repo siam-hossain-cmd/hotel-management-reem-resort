@@ -49,10 +49,18 @@ const app = express();
 
 // CORS configuration - restrict in production
 const corsOptions = isProduction ? {
-  origin: process.env.FRONTEND_URL || 'https://your-domain.com',
+  origin: [
+    'https://melodic-rugelach-3ae87b.netlify.app', // Netlify frontend
+    process.env.FRONTEND_URL, // Additional frontend URL from environment variable
+    'http://localhost:5173',  // Local development
+    'http://localhost:4173'   // Local preview
+  ].filter(Boolean), // Remove undefined values
   credentials: true,
   optionsSuccessStatus: 200
-} : {};
+} : {
+  origin: true, // Allow all origins in development
+  credentials: true
+};
 
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
@@ -80,14 +88,29 @@ app.use('/api/payments', paymentsRouter);
 
 // Protected routes - require token verification (currently none)
 
-// Serve static files in production
+// Serve static files in production (only if dist folder exists - for monorepo deployments)
 if (isProduction) {
   const frontendBuildPath = path.join(__dirname, '..', 'dist');
-  app.use(express.static(frontendBuildPath));
-  
-  // Handle React Router - send all non-API requests to index.html
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  // Check if dist folder exists before serving
+  import('fs').then(fs => {
+    if (fs.existsSync(frontendBuildPath)) {
+      console.log(`🌐 Serving frontend from: ${frontendBuildPath}`);
+      app.use(express.static(frontendBuildPath));
+      
+      // Handle React Router - send all non-API requests to index.html
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(frontendBuildPath, 'index.html'));
+      });
+    } else {
+      console.log('📡 Running as API-only server (frontend hosted separately)');
+      // Catch-all for undefined routes
+      app.use('*', (req, res) => {
+        res.status(404).json({ 
+          error: 'Not Found',
+          message: 'API endpoint not found. Frontend is hosted separately.'
+        });
+      });
+    }
   });
 }
 
