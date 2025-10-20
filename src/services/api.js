@@ -1,6 +1,9 @@
 import authService from '../firebase/authService';
 
-const API_BASE = '/api';
+// Use Render backend URL
+const API_BASE = import.meta.env.PROD 
+  ? 'https://hotel-management-reem-resort-1.onrender.com/api'
+  : '/api';
 
 async function getAuthHeader() {
   try {
