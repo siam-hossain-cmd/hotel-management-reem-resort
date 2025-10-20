@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import admin from 'firebase-admin';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 
 import verifyFirebaseToken from './middleware/verifyFirebaseToken.js';
@@ -12,6 +14,12 @@ import invoicesRouter from './routes/invoices.js';
 import customersRouter from './routes/customers.js';
 import migrateRouter from './routes/migrate.js';
 import paymentsRouter from './routes/payments.js';
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Initialize Firebase Admin
 if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -38,8 +46,24 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
 }
 
 const app = express();
-app.use(cors());
+
+// CORS configuration - restrict in production
+const corsOptions = isProduction ? {
+  origin: process.env.FRONTEND_URL || 'https://your-domain.com',
+  credentials: true,
+  optionsSuccessStatus: 200
+} : {};
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
+
+// Request logging in development
+if (!isProduction) {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
 
 // Health
 app.get('/_health', (req, res) => res.json({ ok: true, ts: Date.now() }));
@@ -56,13 +80,46 @@ app.use('/api/payments', paymentsRouter);
 
 // Protected routes - require token verification (currently none)
 
+// Serve static files in production
+if (isProduction) {
+  const frontendBuildPath = path.join(__dirname, '..', 'dist');
+  app.use(express.static(frontendBuildPath));
+  
+  // Handle React Router - send all non-API requests to index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendBuildPath, 'index.html'));
+  });
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: isProduction ? 'Something went wrong' : err.message 
+  });
+});
+
 const PORT = process.env.PORT || 4000;
 
 initDb().then(() => {
   app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`🚀 Server running in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode`);
+    console.log(`📡 Server listening on port ${PORT}`);
+    if (isProduction) {
+      console.log(`🌐 Serving frontend from: ${path.join(__dirname, '..', 'dist')}`);
+    }
   });
 }).catch(err => {
-  console.error('Failed to initialize DB:', err);
+  console.error('❌ Failed to initialize DB:', err);
   process.exit(1);
 });
+
+// Graceful shutdown
+const gracefulShutdown = () => {
+  console.log('\n🔄 Received shutdown signal, closing server gracefully...');
+  process.exit(0);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

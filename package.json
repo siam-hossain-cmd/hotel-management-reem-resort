@@ -16,7 +16,10 @@
     "start:backend": "cd server && npm start",
     "start:frontend": "vite",
     "start:dev": "concurrently \"npm run server\" \"npm run dev\"",
-    "install:all": "npm install && cd server && npm install"
+    "install:all": "npm install && cd server && npm install",
+    "build:production": "vite build",
+    "start:production": "NODE_ENV=production node server/index.js",
+    "test:production": "npm run build:production && npm run start:production"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

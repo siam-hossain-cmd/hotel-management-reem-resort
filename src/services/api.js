@@ -160,5 +160,15 @@ export const api = {
   getInvoiceByBookingId: async (bookingId) => {
     const res = await fetch(`${API_BASE}/invoices/booking/${bookingId}`);
     return res.json();
+  },
+  deleteInvoice: async (id) => {
+    const res = await fetch(`${API_BASE}/invoices/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      }
+    });
+    return res.json();
   }
 };

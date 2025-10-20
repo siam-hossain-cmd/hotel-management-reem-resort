@@ -1,145 +1,128 @@
-import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { ArrowRight, Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const { login, getDemoCredentials } = useAuth();
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
-
-    if (!formData.email || !formData.password) {
-      setError('Please fill in all fields');
-      setIsLoading(false);
-      return;
-    }
+    setLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
-      
-      if (!result.success) {
-        setError(result.error);
-      }
-      // If successful, the AuthContext will handle the redirect
-    } catch (error) {
-      setError('Login failed. Please try again.');
+      await login(email, password);
+    } catch (err) {
+      setError(err.message || 'Failed to sign in. Please check your credentials.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error when user starts typing
-    if (error) setError('');
-  };
-
-  // Get demo credentials
-  const demoCredentials = getDemoCredentials();
-
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <div className="login-icon">
-            <LogIn size={40} />
+    <div className="hotel-login-container">
+      <div className="hotel-login-overlay"></div>
+      
+      <div className="hotel-login-card">
+        {/* Logo and Header */}
+        <div className="hotel-login-header">
+          <div className="hotel-logo">
+            <ArrowRight size={32} className="hotel-logo-icon" />
           </div>
-          <h1>Reem Resort</h1>
-          <h2>Invoice Management System</h2>
-          <p>Please sign in to continue</p>
+          <h1 className="hotel-title">Reem Resort</h1>
+          <p className="hotel-subtitle">Hotel Management System</p>
+          <p className="hotel-signin-text">Please sign in to continue</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="login-form">
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="hotel-login-form">
           {error && (
-            <div className="error-message">
+            <div className="hotel-error-message">
+              <i className="fa-solid fa-triangle-exclamation"></i>
               <span>{error}</span>
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="email">Email Address</label>
-            <div className="input-with-icon">
-              <Mail size={20} className="input-icon" />
+          {/* Email Input */}
+          <div className="hotel-form-group">
+            <label htmlFor="email" className="hotel-form-label">
+              Email Address
+            </label>
+            <div className="hotel-input-wrapper">
+              <Mail size={18} className="hotel-input-icon" />
               <input
                 type="email"
-                id="email"
                 name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="Enter your email address"
-                disabled={isLoading}
-                autoComplete="email"
+                id="email"
+                className="hotel-input"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
               />
             </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <div className="input-with-icon">
-              <Lock size={20} className="input-icon" />
+          {/* Password Input */}
+          <div className="hotel-form-group">
+            <label htmlFor="password" className="hotel-form-label">
+              Password
+            </label>
+            <div className="hotel-input-wrapper">
+              <Lock size={18} className="hotel-input-icon" />
               <input
                 type={showPassword ? 'text' : 'password'}
-                id="password"
                 name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder="Enter your password"
-                disabled={isLoading}
-                autoComplete="current-password"
+                id="password"
+                className="hotel-input"
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
               />
               <button
                 type="button"
-                className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={isLoading}
+                className="hotel-password-toggle"
+                disabled={loading}
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
               </button>
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="login-button"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <span className="loading-spinner">Signing in...</span>
-            ) : (
-              <>
-                <LogIn size={20} />
-                Sign In
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="login-help">
-          <div className="demo-credentials">
-            <h4>Demo Credentials:</h4>
-            {demoCredentials.map((cred, index) => (
-              <div key={index} className="credential-item">
-                <strong>{cred.name}:</strong>
-                <span>Email: {cred.email}</span>
-                <span>Password: {cred.password}</span>
-              </div>
-            ))}
+          {/* Sign In Button */}
+          <div className="hotel-form-group">
+            <button
+              type="submit"
+              className="hotel-signin-button"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <div className="hotel-spinner"></div>
+                  <span>Signing in...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowRight size={18} className="hotel-button-icon" />
+                  <span>Sign In</span>
+                </>
+              )}
+            </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

@@ -445,17 +445,49 @@ router.get('/', async (req, res) => {
     const pool = getPool();
     const [invoices] = await pool.query(
       `SELECT 
-        i.*,
+        i.id,
+        i.invoice_number,
+        i.booking_id,
+        i.customer_id,
+        i.issued_at,
+        i.total,
+        COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
+        i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+        i.currency,
+        i.status,
+        i.created_at,
+        i.tax_rate,
+        i.tax_amount,
         b.booking_reference,
         b.checkin_date,
         b.checkout_date,
+        b.customer_id as booking_customer_id,
+        c.first_name,
+        c.last_name,
+        c.email,
+        c.phone,
         r.room_number,
         r.room_type
       FROM invoices i
       LEFT JOIN bookings b ON i.booking_id = b.id
+      LEFT JOIN customers c ON b.customer_id = c.id
       LEFT JOIN rooms r ON b.room_id = r.id
       ORDER BY i.created_at DESC`
     );
+    
+    console.log('📋 Invoices API - Sample data:', {
+      count: invoices.length,
+      sample: invoices[0] ? {
+        id: invoices[0].id,
+        invoice_number: invoices[0].invoice_number,
+        booking_id: invoices[0].booking_id,
+        customer_id: invoices[0].customer_id,
+        booking_customer_id: invoices[0].booking_customer_id,
+        first_name: invoices[0].first_name,
+        last_name: invoices[0].last_name,
+        email: invoices[0].email
+      } : 'No invoices'
+    });
     
     res.json({
       success: true,

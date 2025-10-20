@@ -229,19 +229,19 @@ const generateInvoiceHTML = (invoice) => {
         <tbody>
           ${(invoice.items || []).map(item => `
             <tr>
-              <td style="padding: 5px 4px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber || 'Room'}</td>
-              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkInDate ? new Date(item.checkInDate).toLocaleDateString() : ''}</td>
-              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkOutDate ? new Date(item.checkOutDate).toLocaleDateString() : ''}</td>
-              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights || 0}</td>
-              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount || 1}</td>
-              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.perNightCost || 0).toFixed(0)}</td>
-              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${(item.amount || 0).toFixed(0)}</td>
+              <td style="padding: 5px 4px; border-bottom: 1px solid #f1f5f9;">${item.roomNumber || item.room_number || 'Room'}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkInDate || item.check_in_date ? new Date(item.checkInDate || item.check_in_date).toLocaleDateString() : ''}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.checkOutDate || item.check_out_date ? new Date(item.checkOutDate || item.check_out_date).toLocaleDateString() : ''}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.totalNights || item.total_nights || 0}</td>
+              <td style="padding: 5px 4px; text-align: center; border-bottom: 1px solid #f1f5f9;">${item.guestCount || item.guest_count || 1}</td>
+              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${parseFloat(item.perNightCost || item.price_per_night || 0).toFixed(0)}</td>
+              <td style="padding: 5px 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${parseFloat(item.amount || 0).toFixed(0)}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
 
-      ${invoice.additionalCharges && invoice.additionalCharges.length > 0 && invoice.additionalCharges.some(charge => charge.description && charge.amount > 0) ? `
+      ${invoice.additionalCharges && invoice.additionalCharges.length > 0 && invoice.additionalCharges.some(charge => charge.description && parseFloat(charge.amount || 0) > 0) ? `
       <!-- Additional Charges -->
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10px;">
         <thead>
@@ -251,10 +251,10 @@ const generateInvoiceHTML = (invoice) => {
           </tr>
         </thead>
         <tbody>
-          ${invoice.additionalCharges.filter(charge => charge.description && charge.amount > 0).map(charge => `
+          ${invoice.additionalCharges.filter(charge => charge.description && parseFloat(charge.amount || 0) > 0).map(charge => `
             <tr>
               <td style="padding: 4px; border-bottom: 1px solid #f1f5f9;">${charge.description}</td>
-              <td style="padding: 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${charge.amount.toFixed(0)}</td>
+              <td style="padding: 4px; text-align: right; border-bottom: 1px solid #f1f5f9;">৳${parseFloat(charge.amount).toFixed(0)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -266,44 +266,44 @@ const generateInvoiceHTML = (invoice) => {
         <div style="width: 300px; font-size: 10px;">
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Original Room Charges:</span>
-            <span>৳${(invoice.originalSubtotal || 0).toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.originalSubtotal || invoice.base_amount || 0).toFixed(0)}</span>
           </div>
-          ${(invoice.totalDiscount && invoice.totalDiscount > 0) ? `
+          ${(invoice.totalDiscount || invoice.discount_amount) && parseFloat(invoice.totalDiscount || invoice.discount_amount || 0) > 0 ? `
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9; color: #dc2626;">
             <span>Total Discount Applied:</span>
-            <span>-৳${invoice.totalDiscount.toFixed(0)}</span>
+            <span>-৳${parseFloat(invoice.totalDiscount || invoice.discount_amount || 0).toFixed(0)}</span>
           </div>
           ` : ''}
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Room Charges After Discount:</span>
-            <span>৳${(invoice.subtotal || 0).toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.subtotal || invoice.subtotal_amount || 0).toFixed(0)}</span>
           </div>
-          ${invoice.additionalTotal && invoice.additionalTotal > 0 ? `
+          ${invoice.additionalTotal || invoice.additional_charges_total ? parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0) > 0 : false ? `
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
             <span>Additional Charges:</span>
-            <span>৳${(invoice.additionalTotal || 0).toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0).toFixed(0)}</span>
           </div>
           ` : ''}
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600;">
             <span>Subtotal (Before VAT):</span>
-            <span>৳${((invoice.subtotal || 0) + (invoice.additionalTotal || 0)).toFixed(0)}</span>
+            <span>৳${(parseFloat(invoice.subtotal || 0) + parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0)).toFixed(0)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
-            <span>VAT (${invoice.taxRate || 0}%):</span>
-            <span>৳${(invoice.tax || invoice.taxAmount || 0).toFixed(0)}</span>
+            <span>VAT (${invoice.taxRate || invoice.tax_rate || 0}%):</span>
+            <span>৳${parseFloat(invoice.tax || invoice.taxAmount || invoice.tax_amount || 0).toFixed(0)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 12px; border-top: 1px solid #3b82f6; border-bottom: 1px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
             <span>Final Total Amount:</span>
-            <span>৳${(invoice.total || 0).toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.total || 0).toFixed(0)}</span>
           </div>
-          ${invoice.totalPaid && invoice.totalPaid > 0 ? `
+          ${invoice.totalPaid || invoice.paid ? `
           <div style="display: flex; justify-content: space-between; padding: 4px 0; color: #059669; font-weight: 600;">
             <span>Total Paid:</span>
-            <span>৳${(invoice.totalPaid || 0).toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.totalPaid || invoice.paid || 0).toFixed(0)}</span>
           </div>
-          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 11px; border-top: 1px solid #e2e8f0; color: ${invoice.dueAmount > 0 ? '#dc2626' : '#059669'};">
+          <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 11px; border-top: 1px solid #e2e8f0; color: ${(invoice.dueAmount || invoice.due) > 0 ? '#dc2626' : '#059669'};">
             <span>Due Amount:</span>
-            <span>৳${invoice.dueAmount.toFixed(0)}</span>
+            <span>৳${parseFloat(invoice.dueAmount || invoice.due || 0).toFixed(0)}</span>
           </div>
           ` : ''}
         </div>
@@ -325,10 +325,10 @@ const generateInvoiceHTML = (invoice) => {
           <tbody>
             ${invoice.payments.map(payment => `
               <tr>
-                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${new Date(payment.date).toLocaleDateString()}</td>
-                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${payment.method.replace('_', ' ')}</td>
-                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${payment.description}</td>
-                <td style="padding: 3px 4px; text-align: right; border-bottom: 1px solid #f1f5f9; color: #059669; font-weight: 600;">৳${payment.amount.toFixed(0)}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${new Date(payment.created_at || payment.payment_date || payment.date).toLocaleDateString()}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9; text-transform: capitalize;">${(payment.method || payment.gateway || 'Cash').replace('_', ' ')}</td>
+                <td style="padding: 3px 4px; border-bottom: 1px solid #f1f5f9;">${payment.notes || payment.description || '-'}</td>
+                <td style="padding: 3px 4px; text-align: right; border-bottom: 1px solid #f1f5f9; color: #059669; font-weight: 600;">৳${parseFloat(payment.amount).toFixed(0)}</td>
               </tr>
             `).join('')}
           </tbody>

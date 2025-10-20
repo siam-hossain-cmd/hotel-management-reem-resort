@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Eye, Edit, Trash2, Download, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Trash2, Download, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { generateInvoicePDF, previewInvoice } from '../utils/pdfGenerator';
@@ -9,8 +9,10 @@ const Invoices = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAccessDeniedModal, setShowAccessDeniedModal] = useState(false);
+  const [accessDeniedAction, setAccessDeniedAction] = useState('');
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
-  const { canPerformAction, user } = useAuth();
+  const { canPerformAction, user, hasPermission } = useAuth();
 
   // Initialize invoices with state management - load from database
   const [invoices, setInvoices] = useState([]);
@@ -25,23 +27,33 @@ const Invoices = () => {
     try {
       setLoading(true);
       const result = await api.getInvoices();
+      console.log('🔍 Frontend - API Result:', result);
+      console.log('🔍 Frontend - First invoice data:', result.invoices?.[0]);
+      
       if (result.success) {
         // Transform database data to match component expectations
-        const transformedInvoices = result.invoices.map(invoice => ({
-          id: invoice.id,
-          customer: `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 'Unknown Customer',
-          amount: parseFloat(invoice.total || 0),
-          status: invoice.status || 'issued',
-          date: invoice.issued_at ? new Date(invoice.issued_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          dueDate: invoice.due_at ? new Date(invoice.due_at).toISOString().split('T')[0] : '',
-          checkInDate: invoice.checkin_date ? new Date(invoice.checkin_date).toISOString().split('T')[0] : '',
-          checkOutDate: invoice.checkout_date ? new Date(invoice.checkout_date).toISOString().split('T')[0] : '',
-          adminName: 'Admin', // Default since we don't have admin tracking yet
-          booking_id: invoice.booking_id,
-          customer_id: invoice.customer_id,
-          room_id: invoice.room_id,
-          fullData: invoice // Keep full invoice data for operations
-        }));
+        const transformedInvoices = result.invoices.map(invoice => {
+          console.log('📝 Transforming invoice:', {
+            id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            first_name: invoice.first_name,
+            last_name: invoice.last_name
+          });
+          
+          return {
+            id: invoice.id,
+            invoiceRef: invoice.invoice_number || invoice.booking_reference || `INV-${invoice.id}`,
+            guestName: `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 'Unknown Guest',
+            amount: parseFloat(invoice.total || 0),
+            dueAmount: parseFloat(invoice.due || 0),
+            status: invoice.status || 'issued',
+            issueDate: invoice.issued_at ? new Date(invoice.issued_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            booking_id: invoice.booking_id,
+            customer_id: invoice.customer_id,
+            fullData: invoice // Keep full invoice data for operations
+          };
+        });
+        console.log('✅ Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
       } else {
         console.error('Failed to load invoices:', result.error);
@@ -54,31 +66,59 @@ const Invoices = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = invoice.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = invoice.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         invoice.invoiceRef.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || invoice.status.toLowerCase() === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
   const handleDeleteClick = (invoice) => {
+    // Check if user has permission to delete invoices
+    if (!hasPermission('delete_invoice')) {
+      setAccessDeniedAction('delete');
+      setShowAccessDeniedModal(true);
+      return;
+    }
+    
     setInvoiceToDelete(invoice);
     setShowDeleteModal(true);
+  };
+
+  const handleCreateInvoiceClick = () => {
+    // Check if user has permission to create invoices
+    if (!hasPermission('create_invoice')) {
+      setAccessDeniedAction('create');
+      setShowAccessDeniedModal(true);
+      return;
+    }
+    
+    // Navigate to create invoice page
+    window.location.href = '/create-invoice';
+  };
+
+  const handleCloseAccessDenied = () => {
+    setShowAccessDeniedModal(false);
+    setAccessDeniedAction('');
   };
 
   const handleConfirmDelete = async () => {
     if (invoiceToDelete) {
       try {
-        // Note: Delete functionality not implemented in API yet
-        // For now, just remove from local state
-        setInvoices(prevInvoices => 
-          prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
-        );
-        console.log('✅ Invoice removed from list:', invoiceToDelete.id);
-        alert('Invoice removed from list (delete API not implemented yet)');
+        // Call backend API to delete invoice
+        const result = await api.deleteInvoice(invoiceToDelete.id);
+        
+        if (result.success) {
+          // Remove from local state after successful deletion
+          setInvoices(prevInvoices => 
+            prevInvoices.filter(invoice => invoice.id !== invoiceToDelete.id)
+          );
+          console.log('✅ Invoice deleted successfully:', invoiceToDelete.id);
+        } else {
+          alert('Error deleting invoice: ' + (result.error || 'Unknown error'));
+        }
       } catch (error) {
         console.error('Error deleting invoice:', error);
-        const errorMsg = error && error.message ? error.message : 'Unknown error occurred';
-        alert('Error deleting invoice: ' + errorMsg);
+        alert('Error deleting invoice: ' + (error.message || 'Unknown error'));
       } finally {
         setShowDeleteModal(false);
         setInvoiceToDelete(null);
@@ -97,36 +137,146 @@ const Invoices = () => {
            (invoice.adminName === user?.name && canPerformAction('edit_invoice'));
   };
 
-  const handleView = (invoice) => {
-    // Use the real invoice data from database
-    const realInvoice = invoice.fullData;
-    if (realInvoice) {
-      previewInvoice(realInvoice);
-    } else {
-      alert('Invoice data not available for preview.');
-      console.error('No fullData available for invoice:', invoice);
+  const handleView = async (invoice) => {
+    try {
+      // Fetch full invoice data from backend
+      const result = await api.getInvoiceById(invoice.id);
+      if (result.success && result.invoice) {
+        // Transform the invoice data to match PDF generator format
+        const transformedInvoice = transformInvoiceData(result.invoice);
+        console.log('✅ TRANSFORMED INVOICE FOR PDF:', transformedInvoice);
+        previewInvoice(transformedInvoice);
+      } else {
+        alert('Failed to load invoice details: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error loading invoice:', error);
+      alert('Failed to load invoice details. Please try again.');
     }
   };
 
   const handleDownload = async (invoice) => {
     try {
-      // Use the real invoice data from database
-      const realInvoice = invoice.fullData;
-      if (realInvoice) {
-        const success = await generateInvoicePDF(realInvoice);
-        if (success) {
-          console.log('PDF downloaded successfully');
-        } else {
+      // Fetch full invoice data from backend
+      const result = await api.getInvoiceById(invoice.id);
+      if (result.success && result.invoice) {
+        // Transform the invoice data to match PDF generator format
+        const transformedInvoice = transformInvoiceData(result.invoice);
+        const success = await generateInvoicePDF(transformedInvoice);
+        if (!success) {
           alert('Failed to generate PDF. Please try again.');
         }
       } else {
-        alert('Invoice data not available for download.');
-        console.error('No fullData available for invoice:', invoice);
+        alert('Failed to load invoice details: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error downloading PDF:', error);
       alert('Failed to generate PDF. Please try again.');
     }
+  };
+
+  // Transform invoice data from API to match PDF generator format
+  const transformInvoiceData = (invoice) => {
+    console.log('🔍 RAW INVOICE DATA:', invoice);
+    
+    // Calculate nights if we have check-in and check-out dates
+    let totalNights = 1;
+    if (invoice.checkin_date && invoice.checkout_date) {
+      const checkIn = new Date(invoice.checkin_date);
+      const checkOut = new Date(invoice.checkout_date);
+      totalNights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+    }
+
+    // Calculate per night cost
+    const baseAmount = parseFloat(invoice.base_amount || invoice.booking_total || invoice.total || 0);
+    const discountPercentage = parseFloat(invoice.discount_percentage || 0);
+    const discountAmount = parseFloat(invoice.discount_amount || 0);
+    const roomTotal = baseAmount - discountAmount;
+    const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
+
+    // Calculate additional charges total
+    const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
+      sum + parseFloat(c.amount || 0), 0
+    );
+    
+    // Get tax data
+    const storedTaxRate = parseFloat(invoice.booking_tax_rate || invoice.tax_rate || 0);
+    const storedTaxAmount = parseFloat(invoice.booking_tax_amount || invoice.tax_amount || 0);
+    const subtotalBeforeTax = parseFloat(invoice.subtotal_amount || roomTotal);
+    
+    let taxRate = storedTaxRate;
+    let taxAmount = storedTaxAmount;
+    
+    // If tax_amount exists but not tax_rate, calculate rate
+    if (taxAmount > 0 && taxRate === 0 && subtotalBeforeTax > 0) {
+      taxRate = (taxAmount / subtotalBeforeTax) * 100;
+    }
+    
+    const finalTotal = parseFloat(invoice.total || invoice.booking_total || 0);
+
+    return {
+      id: invoice.invoice_number || `INV-${invoice.id}`,
+      invoice_number: invoice.invoice_number || `INV-${invoice.id}`,
+      booking_id: invoice.booking_id,
+      booking_reference: invoice.booking_reference,
+      invoiceDate: invoice.invoice_date || invoice.issued_at || invoice.created_at,
+      dueDate: invoice.due_date || invoice.due_at,
+      customerInfo: {
+        name: invoice.customer_name || 
+              `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || 
+              'Guest',
+        email: invoice.customer_email || invoice.email || '',
+        phone: invoice.customer_phone || invoice.phone || '',
+        nid: invoice.customer_nid || invoice.nid || '',
+        address: invoice.customer_address || invoice.address || ''
+      },
+      items: invoice.items && invoice.items.length > 0 ? 
+        invoice.items.map(item => ({
+          roomNumber: item.room_number || invoice.room_number || 'N/A',
+          checkInDate: item.check_in_date || invoice.checkin_date,
+          checkOutDate: item.check_out_date || invoice.checkout_date,
+          totalNights: item.total_nights || totalNights,
+          guestCount: item.guest_count || invoice.capacity || 1,
+          perNightCost: parseFloat(item.price_per_night || item.unit_price || perNightCost || 0),
+          amount: parseFloat(item.amount || item.line_total || roomTotal || 0)
+        })) : 
+        [{
+          roomNumber: invoice.room_number || 'N/A',
+          checkInDate: invoice.checkin_date,
+          checkOutDate: invoice.checkout_date,
+          totalNights: totalNights,
+          guestCount: invoice.capacity || 1,
+          perNightCost: perNightCost,
+          amount: roomTotal
+        }],
+      additionalCharges: (invoice.charges || []).map(charge => ({
+        description: charge.description,
+        amount: parseFloat(charge.amount || 0)
+      })),
+      originalSubtotal: baseAmount,
+      discountPercentage: discountPercentage,
+      totalDiscount: discountAmount,
+      subtotal: roomTotal,
+      additionalChargesTotal: additionalChargesTotal,
+      additionalTotal: additionalChargesTotal,
+      taxRate: taxRate,
+      tax: taxAmount,
+      total: parseFloat(invoice.total || finalTotal),
+      paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
+      balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
+      totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
+      paid: parseFloat(invoice.paid || invoice.paid_amount || 0),
+      due: parseFloat(invoice.due || invoice.due_amount || 0),
+      notes: invoice.notes || '',
+      terms: invoice.terms || 'Payment due upon receipt.',
+      payments: (invoice.payments || []).map(payment => ({
+        amount: parseFloat(payment.amount || 0),
+        method: payment.method || payment.gateway || 'CASH',
+        description: payment.notes || payment.gateway_payment_id || 'Payment',
+        date: payment.payment_date || payment.processed_at || payment.created_at
+      }))
+    };
   };
 
   const handleEdit = (invoice) => {
@@ -151,12 +301,10 @@ const Invoices = () => {
     <div className="invoices-page">
       <div className="page-header">
         <h1>Invoices</h1>
-        {canPerformAction('create_invoice') && (
-          <Link to="/create-invoice" className="btn btn-primary">
-            <Plus size={20} />
-            Create Invoice
-          </Link>
-        )}
+        <button onClick={handleCreateInvoiceClick} className="btn btn-primary">
+          <Plus size={20} />
+          Create Invoice
+        </button>
       </div>
 
       {loading ? (
@@ -194,41 +342,36 @@ const Invoices = () => {
 
       <div className="invoices-table">
         <div className="table-header">
-          <div>Invoice ID</div>
-          <div>Customer</div>
+          <div>Invoice Ref No</div>
+          <div>Guest Name</div>
           <div>Amount</div>
+          <div>Due Amount</div>
           <div>Status</div>
           <div>Issue Date</div>
-          <div>Due Date</div>
           <div>Actions</div>
         </div>
         
         {filteredInvoices.map((invoice) => (
           <div key={invoice.id} className="table-row">
-            <div className="invoice-id">{invoice.id}</div>
-            <div className="customer-name">{invoice.customer}</div>
+            <div className="invoice-id">{invoice.invoiceRef}</div>
+            <div className="customer-name">{invoice.guestName}</div>
             <div className="amount">৳{invoice.amount.toFixed(2)}</div>
+            <div className="amount" style={{ color: invoice.dueAmount > 0 ? '#ef4444' : '#10b981' }}>
+              ৳{invoice.dueAmount.toFixed(2)}
+            </div>
             <div>
               <span className={`status-badge ${invoice.status.toLowerCase()}`}>
-                {invoice.status}
+                {invoice.status.toUpperCase()}
               </span>
             </div>
-            <div className="date-cell">{invoice.date}</div>
-            <div className="date-cell">{invoice.dueDate}</div>
+            <div className="date-cell">{invoice.issueDate}</div>
             <div className="actions">
-              <button className="action-btn view" title="View" onClick={() => handleView(invoice)}>
+              <button className="action-btn view" title="View Invoice" onClick={() => handleView(invoice)}>
                 <Eye size={16} />
               </button>
               <button 
-                className="action-btn edit" 
-                title="Edit"
-                onClick={() => handleEdit(invoice)}
-              >
-                <Edit size={16} />
-              </button>
-              <button 
                 className="action-btn download" 
-                title="Download"
+                title="Download PDF"
                 onClick={() => handleDownload(invoice)}
               >
                 <Download size={16} />
@@ -264,9 +407,10 @@ const Invoices = () => {
             <div className="modal-body">
               <p>Are you sure you want to delete this invoice?</p>
               <div className="invoice-details">
-                <strong>Invoice ID:</strong> {invoiceToDelete?.id}<br />
-                <strong>Customer:</strong> {invoiceToDelete?.customer}<br />
-                <strong>Amount:</strong> ৳{invoiceToDelete?.amount?.toFixed(2) || '0.00'}
+                <strong>Invoice Ref:</strong> {invoiceToDelete?.invoiceRef}<br />
+                <strong>Guest:</strong> {invoiceToDelete?.guestName}<br />
+                <strong>Amount:</strong> ৳{invoiceToDelete?.amount?.toFixed(2) || '0.00'}<br />
+                <strong>Due:</strong> ৳{invoiceToDelete?.dueAmount?.toFixed(2) || '0.00'}
               </div>
               <p className="warning-text">
                 <strong>Warning:</strong> This action cannot be undone.
@@ -285,6 +429,38 @@ const Invoices = () => {
               >
                 <Trash2 size={16} />
                 Delete Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Access Denied Modal */}
+      {showAccessDeniedModal && (
+        <div className="modal-overlay">
+          <div className="access-denied-modal">
+            <div className="access-denied-header">
+              <AlertTriangle size={48} className="access-denied-icon" />
+              <h2>Access Denied</h2>
+            </div>
+            <div className="access-denied-body">
+              <p className="access-denied-message">
+                You do not have permission to {accessDeniedAction} invoices.
+              </p>
+              <div className="access-denied-info">
+                <p><strong>Your Role:</strong> {user?.role || 'Unknown'}</p>
+                <p><strong>Required Permission:</strong> MasterAdmin or FullAdmin</p>
+              </div>
+              <p className="access-denied-contact">
+                Please contact your Manager or Administrator if you need access to this feature.
+              </p>
+            </div>
+            <div className="access-denied-actions">
+              <button 
+                className="btn btn-primary" 
+                onClick={handleCloseAccessDenied}
+              >
+                Understood
               </button>
             </div>
           </div>
