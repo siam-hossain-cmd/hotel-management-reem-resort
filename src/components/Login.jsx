@@ -56,7 +56,7 @@ const Login = () => {
             <div className="hotel-input-wrapper">
               <Mail size={18} className="hotel-input-icon" />
               <input
-                type="email"
+                type="text"
                 name="email"
                 id="email"
                 className="hotel-input"
@@ -65,6 +65,8 @@ const Login = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 required
+                autoComplete="email"
+                inputMode="email"
               />
             </div>
           </div>

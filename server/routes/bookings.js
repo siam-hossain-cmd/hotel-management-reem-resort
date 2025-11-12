@@ -87,7 +87,6 @@ router.post('/', async (req, res) => {
       email,
       phone,
       address,
-      id_type,
       id_number,
       special_requests,
       room_number,
@@ -115,8 +114,7 @@ router.post('/', async (req, res) => {
         email,
         phone,
         address,
-        id_type,
-        id_number,
+        nid: id_number,
         special_requests,
     };
 
@@ -159,34 +157,33 @@ router.post('/', async (req, res) => {
     // Create or find customer
     let customer_id;
     if (guestInfo.email) {
-      // Check if customer exists
+      // Check if customer with EXACT same details exists
       const [existingCustomer] = await conn.query(
-        'SELECT id FROM customers WHERE email = ?',
-        [guestInfo.email]
+        'SELECT id FROM customers WHERE email = ? AND first_name = ? AND last_name = ?',
+        [guestInfo.email, guestInfo.first_name, guestInfo.last_name]
       );
       
       if (existingCustomer.length > 0) {
+        // Use existing customer only if name matches too
         customer_id = existingCustomer[0].id;
-        // Update customer info
-        await conn.query(
-          'UPDATE customers SET first_name = ?, last_name = ?, phone = ?, address = ?, nid = ?, updated_at = NOW() WHERE id = ?',
-          [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null, customer_id]
-        );
+        console.log('✅ Using existing customer:', customer_id);
       } else {
-        // Create new customer
+        // Create new customer (different person with same email or different name)
         const [customerResult] = await conn.query(
           'INSERT INTO customers (first_name, last_name, email, phone, address, nid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
-          [guestInfo.first_name, guestInfo.last_name, guestInfo.email, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null]
+          [guestInfo.first_name, guestInfo.last_name, guestInfo.email, guestInfo.phone, guestInfo.address || null, guestInfo.nid || null]
         );
         customer_id = customerResult.insertId;
+        console.log('✅ Created new customer:', customer_id);
       }
     } else {
-      // Create customer without email
+      // Create customer without email (always create new)
       const [customerResult] = await conn.query(
         'INSERT INTO customers (first_name, last_name, phone, address, nid, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-        [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.id_number || null]
+        [guestInfo.first_name, guestInfo.last_name, guestInfo.phone, guestInfo.address || null, guestInfo.nid || null]
       );
       customer_id = customerResult.insertId;
+      console.log('✅ Created new customer without email:', customer_id);
     }
 
     // Generate booking reference
@@ -194,8 +191,8 @@ router.post('/', async (req, res) => {
 
     // Insert booking WITHOUT paid_amount first (we'll calculate it from payments table)
     const [bookingResult] = await conn.query(
-      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, base_amount, discount_percentage, discount_amount, subtotal_amount, tax_rate, tax_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      `INSERT INTO bookings (booking_reference, customer_id, room_id, status, checkin_date, checkout_date, total_amount, base_amount, discount_percentage, discount_amount, subtotal_amount, tax_rate, tax_amount, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [
         bookingRef, 
         customer_id, 
@@ -209,7 +206,8 @@ router.post('/', async (req, res) => {
         discount_amount || 0,
         subtotal_amount || total_amount || 0,
         tax_rate || 0,
-        tax_amount || 0
+        tax_amount || 0,
+        created_by || 'Unknown'
       ]
     );
 
@@ -605,7 +603,12 @@ router.get('/:id/summary', async (req, res) => {
           checkInDate: booking.checkin_date,
           checkOutDate: booking.checkout_date,
           status: booking.status,
-          createdAt: booking.created_at
+          createdAt: booking.created_at,
+          createdBy: booking.created_by,
+          room_id: booking.room_id,
+          room_rate: booking.subtotal_amount ? parseFloat(booking.subtotal_amount) / Math.ceil((new Date(booking.checkout_date) - new Date(booking.checkin_date)) / (1000 * 60 * 60 * 24)) : 0,
+          original_room_id: booking.original_room_id,
+          room_change_history: booking.room_change_history ? JSON.parse(booking.room_change_history) : null
         },
         charges: charges.map(charge => ({
           id: charge.id,
@@ -651,6 +654,269 @@ router.get('/:id/summary', async (req, res) => {
   } catch (err) {
     console.error('Failed to fetch booking summary:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Change room for a booking (room transfer/upgrade/downgrade)
+router.post('/:id/change-room', async (req, res) => {
+  const connection = await getPool().getConnection();
+  
+  try {
+    await connection.beginTransaction();
+    
+    const bookingId = req.params.id;
+    const { 
+      new_room_id, 
+      reason, 
+      notes,
+      discount_percentage = 0,
+      vat_percentage = 0,
+      calculated_charge, // Final charge amount from frontend
+      nights_affected, // Nights from frontend
+      changed_by 
+    } = req.body;
+
+    if (!new_room_id || !reason) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'New room ID and reason are required' 
+      });
+    }
+
+    // Get current booking details
+    const [bookings] = await connection.query(`
+      SELECT 
+        b.*,
+        r.room_number as current_room_number,
+        r.room_type as current_room_type,
+        r.rate as current_room_rate
+      FROM bookings b
+      JOIN rooms r ON b.room_id = r.id
+      WHERE b.id = ?
+    `, [bookingId]);
+
+    if (bookings.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+
+    const booking = bookings[0];
+
+    // Only allow room change for checked-in bookings
+    if (booking.status !== 'checked_in') {
+      await connection.rollback();
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Room can only be changed for checked-in bookings' 
+      });
+    }
+
+    // Get new room details
+    const [newRooms] = await connection.query(`
+      SELECT * FROM rooms WHERE id = ?
+    `, [new_room_id]);
+
+    if (newRooms.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, error: 'New room not found' });
+    }
+
+    const newRoom = newRooms[0];
+
+    // Check if new room is available
+    if (newRoom.status !== 'available') {
+      await connection.rollback();
+      return res.status(400).json({ 
+        success: false, 
+        error: `Room ${newRoom.room_number} is not available` 
+      });
+    }
+
+    // Use calculated values from frontend
+    const oldRate = parseFloat(booking.current_room_rate);
+    const newRate = parseFloat(newRoom.rate);
+    
+    // If frontend provided calculated charge, use it. Otherwise calculate.
+    let priceAdjustment, remainingNights, discountAmount, newRateAfterDiscount, vatAmount, subtotal;
+    
+    if (calculated_charge !== undefined && nights_affected !== undefined) {
+      // Use frontend calculations
+      priceAdjustment = parseFloat(calculated_charge);
+      remainingNights = parseInt(nights_affected);
+      
+      // Calculate component values for history
+      discountAmount = (newRate * parseFloat(discount_percentage)) / 100;
+      newRateAfterDiscount = newRate - discountAmount;
+      const rateDifference = newRateAfterDiscount - oldRate;
+      subtotal = rateDifference * remainingNights;
+      vatAmount = (subtotal * parseFloat(vat_percentage)) / 100;
+    } else {
+      // Fallback: Calculate on backend
+      const checkoutDate = new Date(booking.checkout_date);
+      checkoutDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      remainingNights = Math.max(0, Math.floor((checkoutDate - today) / (1000 * 60 * 60 * 24)));
+      
+      if (remainingNights <= 0) {
+        await connection.rollback();
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Cannot change room: checkout date has passed' 
+        });
+      }
+      
+      discountAmount = (newRate * parseFloat(discount_percentage)) / 100;
+      newRateAfterDiscount = newRate - discountAmount;
+      const rateDifference = newRateAfterDiscount - oldRate;
+      subtotal = rateDifference * remainingNights;
+      vatAmount = (subtotal * parseFloat(vat_percentage)) / 100;
+      priceAdjustment = subtotal + vatAmount;
+    }
+
+    // Create room change history entry
+    const changeEntry = {
+      date: new Date().toISOString(),
+      from_room_id: booking.room_id,
+      from_room_number: booking.current_room_number,
+      from_room_type: booking.current_room_type,
+      from_room_rate: oldRate,
+      to_room_id: new_room_id,
+      to_room_number: newRoom.room_number,
+      to_room_type: newRoom.room_type,
+      to_room_rate: newRate,
+      discount_percentage: parseFloat(discount_percentage),
+      discount_amount: discountAmount,
+      new_rate_after_discount: newRateAfterDiscount,
+      vat_percentage: parseFloat(vat_percentage),
+      vat_amount: vatAmount,
+      nights_affected: remainingNights,
+      subtotal: subtotal,
+      price_adjustment: priceAdjustment,
+      reason: reason,
+      changed_by: changed_by || 'admin',
+      notes: notes || ''
+    };
+
+    // Get existing history or create new array
+    let roomChangeHistory = [];
+    if (booking.room_change_history) {
+      try {
+        roomChangeHistory = JSON.parse(booking.room_change_history);
+      } catch (e) {
+        roomChangeHistory = [];
+      }
+    }
+    roomChangeHistory.push(changeEntry);
+
+    // Update booking with new room and history
+    await connection.query(`
+      UPDATE bookings 
+      SET 
+        room_id = ?,
+        original_room_id = COALESCE(original_room_id, ?),
+        room_change_history = ?,
+        updated_at = NOW()
+      WHERE id = ?
+    `, [
+      new_room_id,
+      booking.room_id, // Set original_room_id if not already set
+      JSON.stringify(roomChangeHistory),
+      bookingId
+    ]);
+
+    // Add price adjustment as a charge (if not same price)
+    if (priceAdjustment !== 0) {
+      let chargeDescription = '';
+      if (priceAdjustment > 0) {
+        chargeDescription = `Room Change: ${booking.current_room_number} → ${newRoom.room_number}`;
+        if (discount_percentage > 0) {
+          chargeDescription += ` (${discount_percentage}% discount applied)`;
+        }
+        if (vat_percentage > 0) {
+          chargeDescription += ` + ${vat_percentage}% VAT`;
+        }
+      } else {
+        chargeDescription = `Room Change Credit: ${booking.current_room_number} → ${newRoom.room_number}`;
+      }
+
+      await connection.query(`
+        INSERT INTO booking_charges 
+        (booking_id, charge_type, description, amount, created_at)
+        VALUES (?, 'room_change', ?, ?, NOW())
+      `, [bookingId, chargeDescription, priceAdjustment]);
+      
+      // Update booking total_amount to include this charge
+      await connection.query(`
+        UPDATE bookings 
+        SET total_amount = total_amount + ?, updated_at = NOW() 
+        WHERE id = ?
+      `, [priceAdjustment, bookingId]);
+    }
+
+    // Update old room status to available
+    await connection.query(`
+      UPDATE rooms SET status = 'available' WHERE id = ?
+    `, [booking.room_id]);
+
+    // Update new room status to occupied
+    await connection.query(`
+      UPDATE rooms SET status = 'occupied' WHERE id = ?
+    `, [new_room_id]);
+
+    await connection.commit();
+
+    res.json({ 
+      success: true, 
+      message: 'Room changed successfully',
+      changeDetails: {
+        fromRoom: `${booking.current_room_number} (${booking.current_room_type})`,
+        toRoom: `${newRoom.room_number} (${newRoom.room_type})`,
+        nightsAffected: remainingNights,
+        priceAdjustment: priceAdjustment,
+        adjustmentType: priceAdjustment > 0 ? 'upgrade' : priceAdjustment < 0 ? 'downgrade' : 'same_price'
+      }
+    });
+
+  } catch (err) {
+    await connection.rollback();
+    console.error('Failed to change room:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// Clear room change history for a booking (admin only)
+router.delete('/:id/room-change-history', async (req, res) => {
+  const connection = await getPool().getConnection();
+  
+  try {
+    const bookingId = req.params.id;
+    
+    // Clear room change history
+    await connection.query(`
+      UPDATE bookings 
+      SET room_change_history = '[]'
+      WHERE id = ?
+    `, [bookingId]);
+    
+    // Delete all room change charges
+    await connection.query(`
+      DELETE FROM booking_charges 
+      WHERE booking_id = ? AND charge_type = 'room_change'
+    `, [bookingId]);
+    
+    res.json({ 
+      success: true, 
+      message: 'Room change history cleared successfully' 
+    });
+    
+  } catch (err) {
+    console.error('Failed to clear room change history:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    connection.release();
   }
 });
 

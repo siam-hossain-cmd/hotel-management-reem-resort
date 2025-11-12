@@ -146,4 +146,40 @@ router.put('/:id/status', async (req, res) => {
   }
 });
 
+// Delete room endpoint - permanently removes room from database
+router.delete('/:id', async (req, res) => {
+  try {
+    const pool = getPool();
+    const roomId = req.params.id;
+    
+    // Check if room has any bookings
+    const [bookings] = await pool.query(
+      'SELECT COUNT(*) as count FROM bookings WHERE room_id = ?',
+      [roomId]
+    );
+    
+    if (bookings[0].count > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Cannot delete room with existing bookings. Please cancel or complete all bookings first.' 
+      });
+    }
+    
+    // Delete the room
+    const [result] = await pool.query(
+      'DELETE FROM rooms WHERE id = ?',
+      [roomId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, error: 'Room not found' });
+    }
+    
+    res.json({ success: true, message: 'Room deleted successfully' });
+  } catch (err) {
+    console.error('Failed to delete room:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;

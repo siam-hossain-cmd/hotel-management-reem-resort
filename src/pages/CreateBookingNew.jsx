@@ -258,7 +258,8 @@ const CreateBooking = () => {
         status: 'confirmed',
         payment_status: paymentStatus,
         paid_amount: totalPaid,
-        payments: payments
+        payments: payments,
+        created_by: user?.name || user?.email || 'Unknown' // Include staff member's name
       };
       
       console.log('Creating booking with data:', bookingData);
@@ -367,11 +368,12 @@ const CreateBooking = () => {
       sum + parseFloat(c.amount || 0), 0
     );
     
-    // Calculate tax/VAT
+    // Calculate tax/VAT - ONLY on room charges, additional charges already include VAT
     const taxRate = parseFloat(invoice.tax_rate || 0);
-    const subtotalBeforeTax = roomTotal + additionalChargesTotal;
-    const taxAmount = parseFloat(invoice.tax_amount || 0) || (subtotalBeforeTax * taxRate / 100);
-    const finalTotal = subtotalBeforeTax + taxAmount;
+    const taxAmount = parseFloat(invoice.tax_amount || 0);
+    
+    // Final total = Room after discount + Room VAT + Additional charges (which already have VAT)
+    const finalTotal = roomTotal + taxAmount + additionalChargesTotal;
 
     return {
       id: invoice.invoice_number || `INV-${invoice.id}`,

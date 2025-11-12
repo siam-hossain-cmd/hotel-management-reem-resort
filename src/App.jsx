@@ -16,6 +16,7 @@ import Bookings from './pages/Bookings';
 import AdminManagement from './pages/AdminManagement';
 import UserManagement from './pages/UserManagement';
 import Reports from './pages/Reports';
+import Settings from './pages/Settings';
 
 import './App.css';
 
@@ -200,11 +201,8 @@ const AppContent = () => {
           <Route 
             path="/settings" 
             element={
-              <ProtectedRoute role="MasterAdmin">
-                <div style={{ padding: '2rem' }}>
-                  <h1>System Settings</h1>
-                  <p>System configuration and settings will be displayed here.</p>
-                </div>
+              <ProtectedRoute>
+                <Settings />
               </ProtectedRoute>
             } 
           />

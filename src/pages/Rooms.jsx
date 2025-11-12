@@ -13,7 +13,10 @@ import {
   XCircle,
   AlertCircle,
   Grid,
-  List
+  List,
+  Trash2,
+  Save,
+  X as CloseIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -32,8 +35,10 @@ const Rooms = () => {
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [editingRoom, setEditingRoom] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({});
   
-  const { canPerformAction } = useAuth();
+  const { canPerformAction, isMasterAdmin } = useAuth();
 
   const canEditRooms = () => canPerformAction('edit_rooms');
 
@@ -75,13 +80,70 @@ const Rooms = () => {
   };
 
   const handleEditRoom = (room) => {
-    if (!canEditRooms()) {
-      alert('You do not have permission to edit rooms');
+    if (!isMasterAdmin()) {
+      alert('Only Master Admin can edit rooms');
       return;
     }
     setEditingRoom(room);
-    // For now, just show an alert. You can implement a proper edit modal later
-    alert(`Edit functionality for Room ${room.room_number} - Coming soon!\nRoom Type: ${room.room_type}\nCapacity: ${room.capacity}\nRate: ৳${room.rate}`);
+    setEditFormData({
+      room_type: room.room_type,
+      capacity: room.capacity,
+      rate: room.rate,
+      status: room.status,
+      description: room.description || '',
+      floor: room.floor || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateRoom = async (e) => {
+    e.preventDefault();
+    if (!isMasterAdmin()) {
+      alert('Only Master Admin can update rooms');
+      return;
+    }
+
+    try {
+      const result = await api.updateRoom(editingRoom.id, editFormData);
+      if (result.success) {
+        alert('Room updated successfully!');
+        setShowEditModal(false);
+        setEditingRoom(null);
+        await loadRoomsData();
+      } else {
+        alert(`Failed to update room: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Failed to update room: ${error.message}`);
+    }
+  };
+
+  const handleDeleteRoom = async (room) => {
+    if (!isMasterAdmin()) {
+      alert('Only Master Admin can delete rooms');
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete Room ${room.room_number}?\n\n` +
+      `Type: ${room.room_type}\n` +
+      `Rate: ৳${room.rate}/night\n\n` +
+      `This action cannot be undone!`
+    );
+
+    if (!confirmDelete) return;
+
+    try {
+      const result = await api.deleteRoom(room.id);
+      if (result.success) {
+        alert('Room deleted successfully!');
+        await loadRoomsData();
+      } else {
+        alert(`Failed to delete room: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Failed to delete room: ${error.message}`);
+    }
   };
 
   const handleViewRoom = (room) => {
@@ -332,7 +394,7 @@ const Rooms = () => {
                 <Eye size={16} />
                 <span>View</span>
               </button>
-              {canPerformAction('edit_rooms') && (
+              {isMasterAdmin() && (
                 <>
                   <button 
                     className="action-btn-modern edit" 
@@ -341,6 +403,14 @@ const Rooms = () => {
                   >
                     <Edit size={16} />
                     <span>Edit</span>
+                  </button>
+                  <button 
+                    className="action-btn-modern delete" 
+                    title="Delete Room"
+                    onClick={() => handleDeleteRoom(room)}
+                  >
+                    <Trash2 size={16} />
+                    <span>Delete</span>
                   </button>
                   <select
                     value={room.status}
@@ -382,6 +452,119 @@ const Rooms = () => {
             </div>
             <div className="modal-content">
               <AddRoomForm onRoomAdded={handleRoomAdded} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Room Modal */}
+      {showEditModal && editingRoom && (
+        <div className="modal-overlay">
+          <div className="modal-large">
+            <div className="modal-header">
+              <h2>Edit Room {editingRoom.room_number}</h2>
+              <button 
+                className="modal-close"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingRoom(null);
+                }}
+              >
+                <CloseIcon size={24} />
+              </button>
+            </div>
+            <div className="modal-content">
+              <form onSubmit={handleUpdateRoom} className="edit-room-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Room Type *</label>
+                    <input
+                      type="text"
+                      value={editFormData.room_type}
+                      onChange={(e) => setEditFormData({...editFormData, room_type: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Capacity (Guests) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editFormData.capacity}
+                      onChange={(e) => setEditFormData({...editFormData, capacity: parseInt(e.target.value)})}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Rate (৳/night) *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editFormData.rate}
+                      onChange={(e) => setEditFormData({...editFormData, rate: parseFloat(e.target.value)})}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Status *</label>
+                    <select
+                      value={editFormData.status}
+                      onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
+                      required
+                    >
+                      <option value="available">Available</option>
+                      <option value="occupied">Occupied</option>
+                      <option value="maintenance">Maintenance</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Description</label>
+                    <textarea
+                      value={editFormData.description}
+                      onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
+                      rows="3"
+                      placeholder="Enter room description"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Floor</label>
+                    <input
+                      type="text"
+                      value={editFormData.floor}
+                      onChange={(e) => setEditFormData({...editFormData, floor: e.target.value})}
+                      placeholder="e.g., 1st Floor, Ground Floor"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingRoom(null);
+                    }}
+                  >
+                    <CloseIcon size={18} />
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    <Save size={18} />
+                    Update Room
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

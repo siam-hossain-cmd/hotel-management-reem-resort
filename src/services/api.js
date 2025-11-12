@@ -1,8 +1,9 @@
 import authService from '../firebase/authService';
 
-// Use Render backend URL
+// Production: Use same domain with /api path (requires reverse proxy setup)
+// Development: Proxy to localhost:4000 via Vite config
 const API_BASE = import.meta.env.PROD 
-  ? 'https://hotel-management-reem-resort-1.onrender.com/api'
+  ? '/api'
   : '/api';
 
 async function getAuthHeader() {
@@ -46,6 +47,27 @@ export const api = {
         ...(await getAuthHeader())
       },
       body: JSON.stringify({ status })
+    });
+    return response.json();
+  },
+  updateRoom: async (roomId, roomData) => {
+    const response = await fetch(`${API_BASE}/rooms/${roomId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      },
+      body: JSON.stringify(roomData)
+    });
+    return response.json();
+  },
+  deleteRoom: async (roomId) => {
+    const response = await fetch(`${API_BASE}/rooms/${roomId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      }
     });
     return response.json();
   },
@@ -105,6 +127,27 @@ export const api = {
   },
   getBookingSummary: async (bookingId) => {
     const response = await fetch(`${API_BASE}/bookings/${bookingId}/summary`);
+    return response.json();
+  },
+  changeRoom: async (bookingId, changeData) => {
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/change-room`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      },
+      body: JSON.stringify(changeData)
+    });
+    return response.json();
+  },
+  clearRoomChangeHistory: async (bookingId) => {
+    const response = await fetch(`${API_BASE}/bookings/${bookingId}/room-change-history`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(await getAuthHeader())
+      }
+    });
     return response.json();
   },
   addPayment: async (paymentData) => {

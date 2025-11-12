@@ -327,6 +327,15 @@
   background: #bfdbfe;
 }
 
+.action-btn-modern.delete {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.action-btn-modern.delete:hover {
+  background: #fecaca;
+}
+
 .status-select-modern {
   padding: 0.625rem 1rem;
   border: 2px solid #e2e8f0;
@@ -434,5 +443,113 @@
   .status-select-modern {
     width: 100%;
     margin-left: 0;
+  }
+}
+
+/* Edit Room Form Styles */
+.edit-room-form {
+  padding: 1rem 0;
+}
+
+.edit-room-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.edit-room-form .form-row:has(textarea) {
+  grid-template-columns: 1fr;
+}
+
+.edit-room-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.edit-room-form label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.edit-room-form input,
+.edit-room-form select,
+.edit-room-form textarea {
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.edit-room-form input:focus,
+.edit-room-form select:focus,
+.edit-room-form textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.edit-room-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.edit-room-form .form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #e5e7eb;
+}
+
+.edit-room-form .btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-room-form .btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.edit-room-form .btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.edit-room-form .btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.edit-room-form .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+@media (max-width: 768px) {
+  .edit-room-form .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-room-form .form-actions {
+    flex-direction: column;
+  }
+
+  .edit-room-form .btn {
+    width: 100%;
+    justify-content: center;
   }
 }

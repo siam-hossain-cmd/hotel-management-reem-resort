@@ -50,7 +50,8 @@ const app = express();
 // CORS configuration - restrict in production
 const corsOptions = isProduction ? {
   origin: [
-    'https://melodic-rugelach-3ae87b.netlify.app', // Netlify frontend
+    'https://admin.reemresort.com', // Production frontend
+    'https://www.admin.reemresort.com', // Production frontend with WWW
     process.env.FRONTEND_URL, // Additional frontend URL from environment variable
     'http://localhost:5173',  // Local development
     'http://localhost:4173'   // Local preview

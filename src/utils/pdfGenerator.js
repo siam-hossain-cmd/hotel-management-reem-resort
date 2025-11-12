@@ -241,6 +241,50 @@ const generateInvoiceHTML = (invoice) => {
         </tbody>
       </table>
 
+      ${invoice.roomChangeHistory && invoice.roomChangeHistory.length > 0 ? `
+      <!-- Room Change History -->
+      <div style="background-color: #f0f9ff; border: 1px solid #3b82f6; border-radius: 4px; padding: 8px; margin-bottom: 10px; font-size: 10px;">
+        <h4 style="margin: 0 0 6px 0; color: #1e40af; font-size: 11px; display: flex; align-items: center;">
+          <span style="margin-right: 5px;">🔄</span> Room Change History
+        </h4>
+        <div style="font-size: 9px; color: #475569;">
+          ${invoice.roomChangeHistory.map((change, index) => `
+            <div style="background-color: white; border-left: 3px solid ${change.adjustment_type === 'upgrade' ? '#ef4444' : change.adjustment_type === 'downgrade' ? '#10b981' : '#6b7280'}; padding: 6px; margin-bottom: 5px; border-radius: 2px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <strong style="color: #1e293b;">${new Date(change.changed_at).toLocaleDateString()} at ${new Date(change.changed_at).toLocaleTimeString()}</strong>
+                <span style="padding: 1px 6px; background-color: ${change.adjustment_type === 'upgrade' ? '#fee2e2' : change.adjustment_type === 'downgrade' ? '#d1fae5' : '#f3f4f6'}; color: ${change.adjustment_type === 'upgrade' ? '#991b1b' : change.adjustment_type === 'downgrade' ? '#065f46' : '#6b7280'}; border-radius: 3px; font-weight: 600; font-size: 8px;">
+                  ${change.adjustment_type === 'upgrade' ? '+' : change.adjustment_type === 'downgrade' ? '-' : ''}৳${Math.abs(change.price_adjustment || 0).toFixed(0)} ${change.adjustment_type}
+                </span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; margin: 4px 0;">
+                <div style="padding: 4px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 3px;">
+                  <div style="font-size: 8px; color: #991b1b; font-weight: 600;">FROM</div>
+                  <div style="font-weight: 600; color: #1e293b;">Room ${change.from_room_number}</div>
+                  <div style="color: #64748b; font-size: 8px;">${change.from_room_type}</div>
+                  <div style="color: #059669; font-size: 8px;">৳${change.from_rate?.toFixed(0)}/night</div>
+                </div>
+                <div style="color: #64748b;">→</div>
+                <div style="padding: 4px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 3px;">
+                  <div style="font-size: 8px; color: #065f46; font-weight: 600;">TO</div>
+                  <div style="font-weight: 600; color: #1e293b;">Room ${change.to_room_number}</div>
+                  <div style="color: #64748b; font-size: 8px;">${change.to_room_type}</div>
+                  <div style="color: #059669; font-size: 8px;">৳${change.to_rate?.toFixed(0)}/night</div>
+                </div>
+              </div>
+              <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid #e2e8f0;">
+                <div style="color: #475569;"><strong>Reason:</strong> ${change.reason}</div>
+                ${change.notes ? `<div style="color: #64748b; font-size: 8px; margin-top: 2px;"><strong>Notes:</strong> ${change.notes}</div>` : ''}
+                <div style="color: #64748b; font-size: 8px; margin-top: 2px;">
+                  <strong>Nights Affected:</strong> ${change.remaining_nights} • 
+                  <strong>Changed by:</strong> ${change.changed_by}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
+
       ${invoice.additionalCharges && invoice.additionalCharges.length > 0 && invoice.additionalCharges.some(charge => charge.description && parseFloat(charge.amount || 0) > 0) ? `
       <!-- Additional Charges -->
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10px;">
@@ -278,20 +322,20 @@ const generateInvoiceHTML = (invoice) => {
             <span>Room Charges After Discount:</span>
             <span>৳${parseFloat(invoice.subtotal || invoice.subtotal_amount || 0).toFixed(0)}</span>
           </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
+            <span>VAT on Room (${invoice.taxRate || invoice.tax_rate || 0}%):</span>
+            <span>৳${parseFloat(invoice.tax || invoice.taxAmount || invoice.tax_amount || 0).toFixed(0)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600;">
+            <span>Room Total (with VAT):</span>
+            <span>৳${(parseFloat(invoice.subtotal || invoice.subtotal_amount || 0) + parseFloat(invoice.tax || invoice.taxAmount || invoice.tax_amount || 0)).toFixed(0)}</span>
+          </div>
           ${invoice.additionalTotal || invoice.additional_charges_total ? parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0) > 0 : false ? `
           <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
-            <span>Additional Charges:</span>
+            <span>Additional Charges (inc. VAT):</span>
             <span>৳${parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0).toFixed(0)}</span>
           </div>
           ` : ''}
-          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600;">
-            <span>Subtotal (Before VAT):</span>
-            <span>৳${(parseFloat(invoice.subtotal || 0) + parseFloat(invoice.additionalTotal || invoice.additional_charges_total || 0)).toFixed(0)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
-            <span>VAT (${invoice.taxRate || invoice.tax_rate || 0}%):</span>
-            <span>৳${parseFloat(invoice.tax || invoice.taxAmount || invoice.tax_amount || 0).toFixed(0)}</span>
-          </div>
           <div style="display: flex; justify-content: space-between; padding: 6px 0; font-weight: bold; font-size: 12px; border-top: 1px solid #3b82f6; border-bottom: 1px solid #3b82f6; background-color: #eff6ff; color: #1e40af;">
             <span>Final Total Amount:</span>
             <span>৳${parseFloat(invoice.total || 0).toFixed(0)}</span>

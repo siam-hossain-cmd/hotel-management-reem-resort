@@ -139,12 +139,13 @@ router.get('/:id', async (req, res) => {
     
     // Get invoice with booking and customer details - Select all columns explicitly
     // 💰 RECALCULATE paid/due amounts based on actual payments
+    // 🔄 Use booking's total_amount as the source of truth (includes all charges)
     const [invoices] = await pool.query(
       `SELECT 
               i.id, i.invoice_number, i.booking_id, i.customer_id, i.issued_at, i.due_at,
-              i.total,
+              b.total_amount as total,
               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
-              i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+              b.total_amount - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
               i.currency, i.status, i.paid_at, i.meta,
               i.snapshot_json, i.file_url, i.preview_url, i.created_at,
               i.tax_rate, i.tax_amount,
@@ -361,12 +362,13 @@ router.get('/booking/:booking_id', async (req, res) => {
         await conn.commit();
         
         // Re-fetch the newly created invoice WITH FULL JOIN DATA
+        // 🔄 Use booking's total_amount as the source of truth (includes all charges)
         [invoices] = await conn.query(
           `SELECT 
             i.id, i.invoice_number, i.booking_id, i.customer_id, i.issued_at, i.due_at,
-            i.total, 
+            b.total_amount as total, 
             COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as paid,
-            i.total - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
+            b.total_amount - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_id = i.booking_id AND p.status = 'completed'), 0) as due,
             i.currency, i.status, i.paid_at, i.meta,
             i.snapshot_json, i.file_url, i.preview_url, i.created_at,
             b.booking_reference, b.checkin_date, b.checkout_date, b.base_amount, b.discount_percentage, 

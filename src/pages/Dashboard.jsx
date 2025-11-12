@@ -315,11 +315,23 @@ const Dashboard = () => {
           sum + parseFloat(c.totalAmount || c.amount || 0), 0
         );
         
-        // Calculate tax/VAT
+        // Calculate tax/VAT - ONLY on room charges, additional charges already include VAT
         const taxRate = parseFloat(invoice.tax_rate || 0);
-        const subtotalBeforeTax = roomTotal + additionalChargesTotal;
-        const taxAmount = parseFloat(invoice.tax_amount || 0) || (subtotalBeforeTax * taxRate / 100);
-        const finalTotal = subtotalBeforeTax + taxAmount;
+        const taxAmount = parseFloat(invoice.tax_amount || 0);
+        
+        // Final total = Room after discount + Room VAT + Additional charges (which already have VAT)
+        // Use booking_total (from bookings table) which includes all charges
+        // invoice.total is from invoices table and is static/outdated
+        const finalTotal = parseFloat(invoice.booking_total || invoice.total || 0);
+        
+        console.log('🔍 DASHBOARD INVOICE DATA:', {
+          invoice_total: invoice.total,
+          booking_total: invoice.booking_total,
+          finalTotal,
+          additionalChargesTotal,
+          roomTotal,
+          taxAmount
+        });
         
         // Transform invoice data for PDF - Match Bookings.jsx format
         const transformedInvoice = {
@@ -367,7 +379,7 @@ const Dashboard = () => {
           additionalChargesTotal: additionalChargesTotal,
           taxRate: taxRate,
           tax: taxAmount,
-          total: parseFloat(invoice.total || finalTotal),
+          total: finalTotal, // Use calculated finalTotal (from booking_total)
           paid: parseFloat(invoice.paid || 0),
           due: parseFloat(invoice.due || 0),
           paidAmount: parseFloat(invoice.paid || 0),

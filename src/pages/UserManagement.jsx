@@ -75,13 +75,30 @@ const UserManagement = () => {
       await setDoc(doc(db, 'users', userCredential.user.uid), userData);
 
       console.log('✅ User created successfully in Firestore');
-      alert(`User created successfully!\n- Role: ${newUser.role}\n- Status: Active (isActive: true)\n- Permissions: ${rolePermissions.length} permissions assigned`);
+      alert(
+        `✅ User created successfully!\n\n` +
+        `📧 Email: ${newUser.email}\n` +
+        `🔑 Password: ${newUser.password}\n` +
+        `👤 Role: ${newUser.role}\n` +
+        `📊 Permissions: ${rolePermissions.length} permissions\n\n` +
+        `⚠️ IMPORTANT: Share these credentials with the user!\n` +
+        `They can change their password in Settings after first login.`
+      );
       setNewUser({ email: '', password: '', role: ROLES.FRONT_DESK, name: '' });
       setShowAddUser(false);
       fetchUsers();
     } catch (error) {
       console.error('Error creating user:', error);
-      alert('Error creating user: ' + error.message);
+      if (error.code === 'auth/email-already-in-use') {
+        alert(
+          '⚠️ Email Already Exists!\n\n' +
+          `The email "${newUser.email}" is already registered in Firebase Auth.\n\n` +
+          'This user already exists and can log in with their password.\n' +
+          'If they forgot their password, you need to delete and recreate the user.'
+        );
+      } else {
+        alert('Error creating user: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -243,6 +260,7 @@ const UserManagement = () => {
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
                   placeholder="admin@reemresort.com"
                   required
+                  autoComplete="email"
                 />
               </div>
               <div className="form-group">
@@ -254,6 +272,7 @@ const UserManagement = () => {
                   placeholder="Minimum 6 characters"
                   required
                   minLength="6"
+                  autoComplete="new-password"
                 />
               </div>
               <div className="form-group">

@@ -2,7 +2,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './config';
@@ -337,6 +340,41 @@ class AuthService {
   // Check if user is authenticated
   isAuthenticated() {
     return !!this.currentUser;
+  }
+
+  // Change user password
+  async changePassword(currentPassword, newPassword) {
+    try {
+      const user = auth.currentUser;
+      
+      if (!user) {
+        return {
+          success: false,
+          error: 'No user is currently signed in'
+        };
+      }
+
+      // Re-authenticate user with current password
+      const credential = EmailAuthProvider.credential(
+        user.email,
+        currentPassword
+      );
+
+      await reauthenticateWithCredential(user, credential);
+      
+      // Update password
+      await updatePassword(user, newPassword);
+      
+      console.log('✅ Password updated successfully');
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Password change error:', error);
+      return {
+        success: false,
+        error: this.getErrorMessage(error.code)
+      };
+    }
   }
 
   // Check if user has specific role

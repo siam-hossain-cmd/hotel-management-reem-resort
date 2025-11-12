@@ -2,15 +2,20 @@ import mysql from 'mysql2/promise';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Load environment variables
+dotenv.config({ path: join(__dirname, '../.env') });
+
 const pool = mysql.createPool({
-  host: '216.104.47.118',
-  user: 'reemresort_admin',
-  password: 'tyrfaz-Jojgij-mirge6',
-  database: 'reemresort_hotel_db',
+  host: process.env.MYSQL_HOST || 'localhost',
+  port: process.env.MYSQL_PORT || 3306,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
   waitForConnections: true,
   connectionLimit: 10
 });

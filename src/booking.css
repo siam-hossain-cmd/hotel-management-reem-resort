@@ -3227,6 +3227,16 @@ select.form-control {
   color: white;
 }
 
+.action-btn-modern.change-room {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.action-btn-modern.change-room:hover {
+  background: #f59e0b;
+  color: white;
+}
+
 /* Responsive Design */
 @media (max-width: 1400px) {
   .priority-cards-grid {
@@ -3446,3 +3456,287 @@ select.form-control {
   box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
 }
 
+/* Room Change History Styles */
+.room-history-card {
+  margin-top: 1.5rem;
+}
+
+.room-history-card .card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.history-badge {
+  margin-left: auto;
+  background: #3b82f6;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.room-history-timeline {
+  position: relative;
+  padding-left: 2.5rem;
+}
+
+.room-history-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 20px;
+  bottom: 20px;
+  width: 2px;
+  background: linear-gradient(to bottom, #3b82f6, #e5e7eb);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 2rem;
+}
+
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: -2.5rem;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 2px solid;
+  z-index: 1;
+}
+
+.timeline-marker.start {
+  border-color: #10b981;
+  color: #10b981;
+  background: #d1fae5;
+}
+
+.timeline-marker.change {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: #fef3c7;
+}
+
+.timeline-marker.current {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: #dbeafe;
+}
+
+.timeline-content {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.timeline-title {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
+.timeline-date {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+.timeline-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.timeline-badge.current {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.timeline-details {
+  margin-top: 0.75rem;
+}
+
+.room-info-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 2px solid;
+}
+
+.room-info-box.original {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.room-info-box.from {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.room-info-box.to {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.room-info-box.current-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.flow-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+}
+
+.room-info-box .room-number {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.room-info-box .room-type {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.room-info-box .room-rate {
+  color: #059669;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.change-flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.flow-arrow {
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.change-meta {
+  background: white;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.change-reason,
+.change-notes {
+  color: #374151;
+}
+
+.change-reason strong,
+.change-notes strong {
+  color: #1f2937;
+}
+
+.change-impact {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.nights-affected {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6b7280;
+}
+
+.price-adjustment {
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.price-adjustment.upgrade {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.price-adjustment.downgrade {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.price-adjustment.same {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.change-by {
+  color: #6b7280;
+  font-size: 0.8rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.change-by strong {
+  color: #1f2937;
+}
+
+/* Responsive adjustments for room history */
+@media (max-width: 768px) {
+  .change-flow {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
+
+  .room-history-timeline {
+    padding-left: 2rem;
+  }
+
+  .timeline-marker {
+    left: -2rem;
+  }
+
+  .change-impact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}

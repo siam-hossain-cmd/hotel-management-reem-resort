@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Eye, Edit, Trash2, Calendar, Users, User, CheckCircle, XCircle, Clock, CreditCard, AlertTriangle, X, LogIn, LogOut } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, Trash2, Calendar, Users, User, CheckCircle, XCircle, Clock, CreditCard, AlertTriangle, X, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import bookingService from '../firebase/bookingService';
 import invoiceService from '../firebase/invoiceService';
 import { previewInvoice } from '../utils/pdfGenerator';
+import RoomChangeModal from '../components/RoomChangeModal';
+import SafeBookingView from '../components/SafeBookingView';
 import '../booking.css';
 
 const Bookings = () => {
-  const { canPerformAction, hasPermission } = useAuth();
+  const { canPerformAction, hasPermission, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [bookings, setBookings] = useState([]);
@@ -43,6 +45,8 @@ const Bookings = () => {
     currentDate: null,
     hasWarning: false
   });
+  const [showRoomChangeModal, setShowRoomChangeModal] = useState(false);
+  const [bookingToChangeRoom, setBookingToChangeRoom] = useState(null);
 
   // Format date to dd/mm/yyyy
   const formatDate = (dateString) => {
@@ -63,7 +67,7 @@ const Bookings = () => {
     setLoading(true);
     try {
       const bookingResult = await api.getBookings();
-      if (bookingResult.success) {
+      if (bookingResult.success && Array.isArray(bookingResult.bookings)) {
         const invoiceResult = await invoiceService.getAllInvoices();
         const invoices = invoiceResult.success ? invoiceResult.invoices : [];
         
@@ -111,11 +115,12 @@ const Bookings = () => {
         
         setBookings(transformedBookings);
       } else {
-        console.error('Failed to load bookings:', bookingResult.error);
+        console.error('Failed to load bookings:', bookingResult.error || 'Bookings is not an array');
         setBookings([]);
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
+      setBookings([]);
     } finally {
       setLoading(false);
     }
@@ -365,6 +370,12 @@ const Bookings = () => {
   };
 
   const sortedAndFilteredBookings = React.useMemo(() => {
+    // Ensure filteredBookings is an array before spreading
+    if (!Array.isArray(filteredBookings)) {
+      console.error('❌ filteredBookings is not an array:', filteredBookings);
+      return [];
+    }
+    
     let sortableItems = [...filteredBookings];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
@@ -398,8 +409,34 @@ const Bookings = () => {
   const handleViewBooking = async (booking) => {
     console.log('View booking clicked:', booking);
     
-    // Show modal immediately with basic info
-    setBookingToView(booking);
+    // Create initial booking object without spreading
+    const initialBooking = {
+      id: booking?.id || null,
+      bookingRef: booking?.bookingRef || '',
+      guestName: booking?.guestName || '',
+      guestEmail: booking?.guestEmail || '',
+      guestPhone: booking?.guestPhone || '',
+      roomNumber: booking?.roomNumber || '',
+      roomType: booking?.roomType || '',
+      checkInDate: booking?.checkInDate || '',
+      checkOutDate: booking?.checkOutDate || '',
+      totalNights: booking?.totalNights || 0,
+      guestCount: booking?.guestCount || 1,
+      status: booking?.status || '',
+      createdAt: booking?.createdAt || '',
+      createdBy: booking?.createdBy || '',
+      total: booking?.total || 0,
+      paymentStatus: booking?.paymentStatus || 'unpaid',
+      paidAmount: booking?.paidAmount || 0,
+      dueBalance: booking?.dueBalance || 0,
+      room_change_history: [],
+      charges: [],
+      payments: [],
+      totals: {},
+      invoice: null
+    };
+    
+    setBookingToView(initialBooking);
     setShowViewModal(true);
     
     try {
@@ -408,23 +445,57 @@ const Bookings = () => {
       
       console.log('📊 BOOKING SUMMARY RESULT:', result);
       
-      if (result.success) {
+      if (result.success && result.summary) {
         const { summary } = result;
         
         console.log('💰 PAYMENTS IN SUMMARY:', summary.payments);
         console.log('📋 CHARGES IN SUMMARY:', summary.charges);
+        console.log('🏨 ROOM CHANGE HISTORY RAW:', summary?.booking?.room_change_history);
         
-        // Update modal with full details including charges, payments, and invoice info
-        setBookingToView({
-          ...booking,
-          ...summary.booking,
-          charges: summary.charges || [],
-          payments: summary.payments || [],
+        // Safely extract booking data
+        const bookingData = summary.booking || {};
+        
+        // Parse room_change_history if it's a string
+        let roomChangeHistory = bookingData.room_change_history;
+        if (typeof roomChangeHistory === 'string' && roomChangeHistory) {
+          try {
+            roomChangeHistory = JSON.parse(roomChangeHistory);
+          } catch (e) {
+            console.error('Error parsing room_change_history:', e);
+            roomChangeHistory = [];
+          }
+        }
+        
+        // Build updated booking object explicitly without spreading
+        const updatedBooking = {
+          id: bookingData?.id || booking?.id || null,
+          bookingRef: bookingData?.bookingRef || booking?.bookingRef || '',
+          guestName: bookingData?.guestName || booking?.guestName || '',
+          guestEmail: bookingData?.guestEmail || booking?.guestEmail || '',
+          guestPhone: bookingData?.guestPhone || booking?.guestPhone || '',
+          guestAddress: bookingData?.guestAddress || '',
+          roomNumber: bookingData?.roomNumber || booking?.roomNumber || '',
+          roomType: bookingData?.roomType || booking?.roomType || '',
+          checkInDate: bookingData?.checkInDate || booking?.checkInDate || '',
+          checkOutDate: bookingData?.checkOutDate || booking?.checkOutDate || '',
+          totalNights: booking?.totalNights || 0,
+          guestCount: booking?.guestCount || 1,
+          status: bookingData?.status || booking?.status || '',
+          createdAt: bookingData?.createdAt || booking?.createdAt || '',
+          createdBy: booking?.createdBy || '',
+          paymentStatus: booking?.paymentStatus || 'unpaid',
+          room_id: bookingData?.room_id || null,
+          room_rate: bookingData?.room_rate || 0,
+          original_room_id: bookingData?.original_room_id || null,
+          room_change_history: Array.isArray(roomChangeHistory) ? roomChangeHistory : [],
+          charges: Array.isArray(summary.charges) ? summary.charges : [],
+          payments: Array.isArray(summary.payments) ? summary.payments : [],
           totals: summary.totals || {},
           invoice: summary.invoice || null
-        });
+        };
         
-        console.log('✅ BOOKING TO VIEW UPDATED WITH PAYMENTS');
+        console.log('✅ FINAL BOOKING TO VIEW:', updatedBooking);
+        setBookingToView(updatedBooking);
       }
     } catch (error) {
       console.error('Error fetching booking summary:', error);
@@ -455,6 +526,36 @@ const Bookings = () => {
         notes: ''
       });
     }
+  };
+
+  const handleRoomChangeClick = async (booking) => {
+    try {
+      // Get the full booking details including room rate
+      const result = await api.getBookingSummary(booking.id);
+      if (result.success && result.summary) {
+        const fullBooking = {
+          ...booking,
+          roomId: result.summary.booking.room_id,
+          roomRate: result.summary.booking.room_rate || 0,
+          // Keep the existing properties
+          checkOutDate: booking.checkOutDate,
+          guestName: booking.guestName
+        };
+        setBookingToChangeRoom(fullBooking);
+        setShowRoomChangeModal(true);
+      } else {
+        alert('Failed to load booking details');
+      }
+    } catch (error) {
+      console.error('Error loading booking details:', error);
+      alert('Error loading booking details');
+    }
+  };
+
+  const handleRoomChangeSuccess = () => {
+    setShowRoomChangeModal(false);
+    setBookingToChangeRoom(null);
+    loadBookings(); // Reload bookings to reflect the change
   };
 
   const handleCloseChargeModal = () => {
@@ -628,13 +729,12 @@ const Bookings = () => {
     const roomTotal = baseAmount - discountAmount;
     const perNightCost = totalNights > 0 ? baseAmount / totalNights : 0;
 
-    // Calculate additional charges total - Backend returns totalAmount (camelCase)
+    // Calculate additional charges total
     const additionalChargesTotal = (invoice.charges || []).reduce((sum, c) => 
-      sum + parseFloat(c.totalAmount || c.amount || 0), 0
+      sum + parseFloat(c.amount || 0), 0
     );
     
-    // 🆕 Use stored tax data from database
-    // Prefer booking's tax fields (more accurate), fallback to invoice's tax fields
+    // Get tax data
     const storedTaxRate = parseFloat(invoice.booking_tax_rate || invoice.tax_rate || 0);
     const storedTaxAmount = parseFloat(invoice.booking_tax_amount || invoice.tax_amount || 0);
     const subtotalBeforeTax = parseFloat(invoice.subtotal_amount || roomTotal);
@@ -647,9 +747,13 @@ const Bookings = () => {
       taxRate = (taxAmount / subtotalBeforeTax) * 100;
     }
     
-    const finalTotal = parseFloat(invoice.total || invoice.booking_total || 0);
+    // Use booking_total (from bookings table) which includes all charges
+    // invoice.total is from invoices table and is static/outdated
+    const finalTotal = parseFloat(invoice.booking_total || invoice.total || 0);
     
-    console.log('💰 TAX CALCULATION:', {
+    console.log('💰 INVOICE CHARGES DEBUG:', {
+      charges: invoice.charges,
+      additionalChargesTotal,
       subtotalBeforeTax,
       storedTaxRate,
       storedTaxAmount,
@@ -699,7 +803,7 @@ const Bookings = () => {
         }],
       additionalCharges: (invoice.charges || []).map(charge => ({
         description: charge.description,
-        amount: parseFloat(charge.totalAmount || charge.amount || 0)
+        amount: parseFloat(charge.amount || 0)
       })),
       originalSubtotal: baseAmount,
       discountPercentage: discountPercentage,
@@ -709,30 +813,22 @@ const Bookings = () => {
       additionalTotal: additionalChargesTotal,
       taxRate: taxRate,
       tax: taxAmount,
-      total: parseFloat(invoice.total || finalTotal),
-      // Calculate total paid from payments array if not provided
+      total: finalTotal, // Use calculated finalTotal (from booking_total)
       paidAmount: parseFloat(invoice.paid_amount || invoice.paid || 0),
       balanceDue: parseFloat(invoice.due_amount || invoice.due || 0),
-      // Add aliases for PDF template compatibility
       totalPaid: parseFloat(invoice.paid || invoice.paid_amount || 0),
       dueAmount: parseFloat(invoice.due || invoice.due_amount || 0),
       paid: parseFloat(invoice.paid || invoice.paid_amount || 0),
       due: parseFloat(invoice.due || invoice.due_amount || 0),
       notes: invoice.notes || '',
       terms: invoice.terms || 'Payment due upon receipt.',
-      payments: (invoice.payments || []).map(payment => {
-        console.log('🔍 RAW PAYMENT DATA:', payment);
-        return {
-          amount: parseFloat(payment.amount || 0),
-          method: payment.method || payment.gateway || 'CASH',
-          description: payment.reference || payment.gateway_payment_id || payment.notes || 'Payment',
-          date: payment.payment_date || payment.processed_at || payment.created_at
-        };
-      })
+      payments: (invoice.payments || []).map(payment => ({
+        amount: parseFloat(payment.amount || 0),
+        method: payment.method || payment.gateway || 'CASH',
+        description: payment.notes || payment.gateway_payment_id || 'Payment',
+        date: payment.payment_date || payment.processed_at || payment.created_at
+      }))
     };
-    
-    console.log('💰 TRANSFORMED PAYMENTS:', result.payments);
-    return result;
   };
 
   const createInvoiceForBooking = async (booking) => {
@@ -1153,6 +1249,16 @@ const Bookings = () => {
                       </button>
                     )}
                     
+                    {booking.status === 'checked-in' && hasPermission('update_booking') && (
+                      <button 
+                        className="action-btn-modern change-room" 
+                        title="Change Room"
+                        onClick={() => handleRoomChangeClick(booking)}
+                      >
+                        <RefreshCw size={14} /> Change Room
+                      </button>
+                    )}
+                    
                     {booking.paymentStatus === 'paid' && (
                       <button 
                         className="action-btn invoice" 
@@ -1277,348 +1383,16 @@ const Bookings = () => {
 
       {/* View Booking Modal */}
       {showViewModal && bookingToView && (
-        <div className="modal-overlay">
-          <div className="view-modal modern-booking-modal">
-            <div className="modal-header gradient-header">
-              <div className="header-content">
-                <div className="header-icon">
-                  <Calendar size={28} />
-                </div>
-                <div>
-                  <h3>Booking Details</h3>
-                  <p className="booking-ref-badge">{bookingToView.bookingRef}</p>
-                </div>
-              </div>
-              <button className="close-btn" onClick={handleCloseViewModal}>
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="modal-body scrollable-content">
-              {/* Guest Information Card */}
-              <div className="info-card guest-card">
-                <div className="card-header">
-                  <User size={20} />
-                  <h4>Guest Information</h4>
-                </div>
-                <div className="card-content">
-                  <div className="guest-info-grid">
-                    <div className="guest-info-item">
-                      <div className="guest-info-icon name">👤</div>
-                      <div className="guest-info-content">
-                        <span className="guest-info-label">Guest Name</span>
-                        <span className="guest-info-value">{bookingToView.guestName}</span>
-                      </div>
-                    </div>
-                    <div className="guest-info-item">
-                      <div className="guest-info-icon email">📧</div>
-                      <div className="guest-info-content">
-                        <span className="guest-info-label">Email</span>
-                        <span className="guest-info-value">{bookingToView.guestEmail}</span>
-                      </div>
-                    </div>
-                    <div className="guest-info-item">
-                      <div className="guest-info-icon phone">📱</div>
-                      <div className="guest-info-content">
-                        <span className="guest-info-label">Phone</span>
-                        <span className="guest-info-value">{bookingToView.guestPhone}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Booking Information Card */}
-              <div className="info-card booking-card">
-                <div className="card-header">
-                  <Calendar size={20} />
-                  <h4>Booking Information</h4>
-                </div>
-                <div className="card-content">
-                  {/* Dates Row */}
-                  <div className="dates-grid">
-                    <div className="date-box checkin">
-                      <div className="date-box-icon">📅</div>
-                      <div className="date-box-content">
-                        <span className="date-box-label">Check-in</span>
-                        <span className="date-box-date">{formatDate(bookingToView.checkInDate)}</span>
-                        <span className="date-box-year">{new Date(bookingToView.checkInDate).getFullYear()}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="date-separator">
-                      <div className="separator-line"></div>
-                      <div className="nights-badge">{bookingToView.totalNights} {bookingToView.totalNights === 1 ? 'Night' : 'Nights'}</div>
-                    </div>
-                    
-                    <div className="date-box checkout">
-                      <div className="date-box-icon">📆</div>
-                      <div className="date-box-content">
-                        <span className="date-box-label">Check-out</span>
-                        <span className="date-box-date">{formatDate(bookingToView.checkOutDate)}</span>
-                        <span className="date-box-year">{new Date(bookingToView.checkOutDate).getFullYear()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Room & Guests Info */}
-                  <div className="room-guests-grid">
-                    <div className="room-guest-box room">
-                      <div className="rgb-icon">🏠</div>
-                      <div className="rgb-content">
-                        <span className="rgb-label">Room</span>
-                        <span className="rgb-value">Room {bookingToView.roomNumber}</span>
-                        <span className="rgb-subtitle">{bookingToView.roomType}</span>
-                      </div>
-                    </div>
-                    <div className="room-guest-box guests">
-                      <div className="rgb-icon">👥</div>
-                      <div className="rgb-content">
-                        <span className="rgb-label">Guests</span>
-                        <span className="rgb-value">{bookingToView.guestCount} {bookingToView.guestCount === 1 ? 'Guest' : 'Guests'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Status Row */}
-                  <div className="status-grid">
-                    <div className="status-box-item">
-                      <span className="status-box-label">Booking Status</span>
-                      {getStatusBadge(bookingToView.status)}
-                    </div>
-                    <div className="status-box-item">
-                      <span className="status-box-label">Payment Status</span>
-                      {getPaymentBadge(bookingToView.paymentStatus)}
-                    </div>
-                  </div>
-                  
-                  {/* Footer Meta */}
-                  <div className="booking-footer-meta">
-                    <div className="footer-meta-item">
-                      <Clock size={14} />
-                      <span>Booked on {formatDate(bookingToView.createdAt)}</span>
-                    </div>
-                    <div className="footer-meta-item">
-                      <User size={14} />
-                      <span>By {bookingToView.createdBy}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional Charges Section */}
-              {bookingToView.charges && bookingToView.charges.length > 0 && (
-                <div className="info-card charges-card">
-                  <div className="card-header">
-                    <span className="header-icon">➕</span>
-                    <h4>Additional Charges</h4>
-                  </div>
-                  <div className="card-content">
-                    <div className="charges-list">
-                      {bookingToView.charges.map((charge, index) => {
-                        console.log('💰 Charge data:', charge);
-                        const chargeAmount = parseFloat(charge.totalAmount || charge.amount || 0);
-                        const chargeDate = charge.createdAt || charge.created_at || charge.date;
-                        
-                        return (
-                          <div key={index} className="charge-item modern">
-                            <div className="charge-info">
-                              <span className="charge-name">{charge.description || 'Additional Charge'}</span>
-                              <span className="charge-date">
-                                <Clock size={12} />
-                                {chargeDate ? (
-                                  <>
-                                    {formatDate(chargeDate)} at {new Date(chargeDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                  </>
-                                ) : (
-                                  'Date not available'
-                                )}
-                              </span>
-                            </div>
-                            <div className="charge-amount">
-                              ৳{isNaN(chargeAmount) ? '0.00' : chargeAmount.toFixed(2)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Payment History Section */}
-              {bookingToView.payments && bookingToView.payments.length > 0 && (
-                <div className="info-card payments-card">
-                  <div className="card-header">
-                    <CreditCard size={20} />
-                    <h4>Payment History</h4>
-                  </div>
-                  <div className="card-content">
-                    <div className="payments-list modern">
-                      {bookingToView.payments.map((payment, index) => (
-                        <div key={index} className="payment-item modern">
-                          <div className="payment-icon-wrapper">
-                            <CreditCard size={20} />
-                          </div>
-                          <div className="payment-info">
-                            <div className="payment-method-badge">{(payment.method || 'CASH').toUpperCase()}</div>
-                            <div className="payment-meta">
-                              <Clock size={12} />
-                              <span>{formatDate(payment.processedAt || payment.createdAt)} at {new Date(payment.processedAt || payment.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                            </div>
-                            {payment.reference && (
-                              <div className="payment-reference">
-                                <span>Ref: {payment.reference}</span>
-                              </div>
-                            )}
-                            {payment.receivedBy && (
-                              <div className="payment-received">
-                                <User size={12} />
-                                <span>{payment.receivedBy}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="payment-amount-badge">৳{parseFloat(payment.amount).toFixed(2)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Financial Summary Card */}
-              {bookingToView.totals && (
-                <div className="info-card financial-card">
-                  <div className="card-header financial-header">
-                    <span className="header-icon">💰</span>
-                    <h4>Financial Summary</h4>
-                    <div className="header-badge">
-                      {bookingToView.totals.balance > 0 ? (
-                        <span className="badge-due">Payment Pending</span>
-                      ) : (
-                        <span className="badge-paid">Fully Paid</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="card-content financial-content">
-                    {/* Compact Charges List */}
-                    <div className="financial-charges-list">
-                      {/* Original Room Charges */}
-                      {bookingToView.totals.baseAmount && bookingToView.totals.baseAmount > 0 && (
-                        <div className="charge-line-item">
-                          <span className="charge-line-label">
-                            <span className="charge-line-icon">🏷️</span>
-                            Original Room Price
-                          </span>
-                          <span className="charge-line-value">৳{bookingToView.totals.baseAmount?.toFixed(2)}</span>
-                        </div>
-                      )}
-                      
-                      {/* Discount Information */}
-                      {bookingToView.totals.discountAmount > 0 && (
-                        <div className="charge-line-item discount-item">
-                          <span className="charge-line-label">
-                            <span className="charge-line-icon">🎯</span>
-                            Discount
-                            {bookingToView.totals.discountPercentage > 0 && (
-                              <span className="discount-badge">({bookingToView.totals.discountPercentage}%)</span>
-                            )}
-                          </span>
-                          <span className="charge-line-value discount-value">-৳{bookingToView.totals.discountAmount?.toFixed(2)}</span>
-                        </div>
-                      )}
-                      
-                      {/* Room Charges After Discount */}
-                      <div className="charge-line-item room-total-item">
-                        <span className="charge-line-label">
-                          <span className="charge-line-icon">🛏️</span>
-                          Room Charges {bookingToView.totals.discountAmount > 0 ? '(After Discount)' : ''}
-                        </span>
-                        <span className="charge-line-value">৳{bookingToView.totals.roomTotal?.toFixed(2)}</span>
-                      </div>
-                      
-                      {bookingToView.totals.additionalCharges > 0 && (
-                        <div className="charge-line-item">
-                          <span className="charge-line-label">
-                            <span className="charge-line-icon">➕</span>
-                            Extra Charges
-                          </span>
-                          <span className="charge-line-value">৳{bookingToView.totals.additionalCharges?.toFixed(2)}</span>
-                        </div>
-                      )}
-                      
-                      {bookingToView.totals.vat > 0 && (
-                        <div className="charge-line-item vat-item">
-                          <span className="charge-line-label">
-                            <span className="charge-line-icon">📊</span>
-                            VAT/Tax
-                            {bookingToView.totals.taxRate > 0 && (
-                              <span className="tax-badge">({bookingToView.totals.taxRate}%)</span>
-                            )}
-                          </span>
-                          <span className="charge-line-value vat-value">৳{bookingToView.totals.vat?.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Financial Summary Row */}
-                    <div className="financial-summary-row">
-                      {/* Grand Total */}
-                      <div className="financial-box total-box">
-                        <div className="fb-icon total-icon">💵</div>
-                        <div className="fb-content">
-                          <span className="fb-label">Grand Total</span>
-                          <span className="fb-amount total-amount">৳{bookingToView.totals.grandTotal?.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Total Paid */}
-                      <div className="financial-box paid-box">
-                        <div className="fb-icon paid-icon">✓</div>
-                        <div className="fb-content">
-                          <span className="fb-label">Total Paid</span>
-                          <span className="fb-amount paid-amount">৳{bookingToView.totals.totalPaid?.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Balance Due */}
-                      <div className={`financial-box ${bookingToView.totals.balance > 0 ? 'due-box' : 'clear-box'}`}>
-                        <div className={`fb-icon ${bookingToView.totals.balance > 0 ? 'due-icon' : 'clear-icon'}`}>
-                          {bookingToView.totals.balance > 0 ? '⚠' : '✓'}
-                        </div>
-                        <div className="fb-content">
-                          <span className="fb-label">Balance Due</span>
-                          <span className={`fb-amount ${bookingToView.totals.balance > 0 ? 'due-amount' : 'clear-amount'}`}>
-                            ৳{bookingToView.totals.balance?.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="modal-actions modern-actions">
-              <button className="btn btn-secondary modern-btn" onClick={handleCloseViewModal}>
-                <X size={18} />
-                Close
-              </button>
-              <button className="btn btn-warning modern-btn" onClick={handleAddChargeClick}>
-                <Plus size={18} />
-                Add Charge
-              </button>
-              <button className="btn btn-info modern-btn" onClick={handleAddPaymentClick}>
-                <CreditCard size={18} />
-                Add Payment
-              </button>
-              <button className="btn btn-success modern-btn" onClick={handleViewInvoice}>
-                <Eye size={18} />
-                View Invoice
-              </button>
-            </div>
-          </div>
-        </div>
+        <SafeBookingView
+          booking={bookingToView}
+          onClose={handleCloseViewModal}
+          onAddPayment={handleAddPaymentClick}
+          onAddCharge={handleAddChargeClick}
+          onViewInvoice={handleViewInvoice}
+          formatDate={formatDate}
+          getStatusBadge={getStatusBadge}
+          getPaymentBadge={getPaymentBadge}
+        />
       )}
 
       {/* Payment Modal */}
@@ -1882,6 +1656,21 @@ const Bookings = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Room Change Modal */}
+      {showRoomChangeModal && bookingToChangeRoom && (
+        <div className="modal-overlay">
+          <RoomChangeModal
+            booking={bookingToChangeRoom}
+            onClose={() => {
+              setShowRoomChangeModal(false);
+              setBookingToChangeRoom(null);
+            }}
+            onSuccess={handleRoomChangeSuccess}
+            userName={user?.name || user?.email || 'Unknown'}
+          />
         </div>
       )}
     </div>
