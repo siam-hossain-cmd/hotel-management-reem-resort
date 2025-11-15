@@ -32,7 +32,26 @@ router.get('/available', async (req, res) => {
     const conflictedRoomIds = new Set(conflictedRooms.map(r => r.room_id));
     const availableRooms = allRooms.filter(room => !conflictedRoomIds.has(room.id));
     
-    res.json({ success: true, rooms: availableRooms });
+    // Parse meta field and flatten it into room objects
+    const roomsWithMeta = availableRooms.map(room => {
+      let parsedMeta = {};
+      if (room.meta) {
+        try {
+          parsedMeta = typeof room.meta === 'string' ? JSON.parse(room.meta) : room.meta;
+        } catch (e) {
+          console.error('Error parsing meta for room:', room.id, e);
+        }
+      }
+      
+      return {
+        ...room,
+        floor: parsedMeta.floor || room.floor,
+        description: parsedMeta.description || room.description,
+        meta: parsedMeta
+      };
+    });
+    
+    res.json({ success: true, rooms: roomsWithMeta });
   } catch (err) {
     console.error('Failed to fetch available rooms:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -44,7 +63,27 @@ router.get('/', async (req, res) => {
   try {
     const pool = getPool();
     const [rows] = await pool.query('SELECT * FROM rooms ORDER BY room_number');
-    res.json({ success: true, rooms: rows });
+    
+    // Parse meta field and flatten it into room object
+    const roomsWithMeta = rows.map(room => {
+      let parsedMeta = {};
+      if (room.meta) {
+        try {
+          parsedMeta = typeof room.meta === 'string' ? JSON.parse(room.meta) : room.meta;
+        } catch (e) {
+          console.error('Error parsing meta for room:', room.id, e);
+        }
+      }
+      
+      return {
+        ...room,
+        floor: parsedMeta.floor || room.floor,
+        description: parsedMeta.description || room.description,
+        meta: parsedMeta
+      };
+    });
+    
+    res.json({ success: true, rooms: roomsWithMeta });
   } catch (err) {
     console.error('Failed to fetch rooms:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -56,7 +95,26 @@ router.get('/:id', async (req, res) => {
     const pool = getPool();
     const [rows] = await pool.query('SELECT * FROM rooms WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ success: false, error: 'Room not found' });
-    res.json({ success: true, room: rows[0] });
+    
+    // Parse meta field and flatten it into room object
+    const room = rows[0];
+    let parsedMeta = {};
+    if (room.meta) {
+      try {
+        parsedMeta = typeof room.meta === 'string' ? JSON.parse(room.meta) : room.meta;
+      } catch (e) {
+        console.error('Error parsing meta for room:', room.id, e);
+      }
+    }
+    
+    const roomWithMeta = {
+      ...room,
+      floor: parsedMeta.floor || room.floor,
+      description: parsedMeta.description || room.description,
+      meta: parsedMeta
+    };
+    
+    res.json({ success: true, room: roomWithMeta });
   } catch (err) {
     console.error('Failed to fetch room:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -94,14 +152,28 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const pool = getPool();
-    const { room_type, rate, capacity, status, meta } = req.body;
+    const { room_type, rate, capacity, status, meta, floor, description } = req.body;
     const roomId = req.params.id;
     
     if (!room_type || !rate || !capacity) {
       return res.status(400).json({ success: false, error: 'Room type, rate, and capacity are required' });
     }
     
-    const metaJson = typeof meta === 'string' ? meta : JSON.stringify(meta || {});
+    // Build meta object with floor and description
+    let metaObject = {};
+    if (meta) {
+      metaObject = typeof meta === 'string' ? JSON.parse(meta) : meta;
+    }
+    
+    // Add floor and description to meta if provided
+    if (floor !== undefined) {
+      metaObject.floor = floor;
+    }
+    if (description !== undefined) {
+      metaObject.description = description;
+    }
+    
+    const metaJson = JSON.stringify(metaObject);
     
     const [result] = await pool.query(
       'UPDATE rooms SET room_type = ?, rate = ?, capacity = ?, status = ?, meta = ? WHERE id = ?',
