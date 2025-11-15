@@ -155,25 +155,47 @@ router.put('/:id', async (req, res) => {
     const { room_type, rate, capacity, status, meta, floor, description } = req.body;
     const roomId = req.params.id;
     
+    console.log('📝 Update room request:', { roomId, floor, description, meta });
+    
     if (!room_type || !rate || !capacity) {
       return res.status(400).json({ success: false, error: 'Room type, rate, and capacity are required' });
     }
     
+    // First, get the current room data to preserve existing meta
+    const [currentRoom] = await pool.query('SELECT meta FROM rooms WHERE id = ?', [roomId]);
+    
+    if (!currentRoom.length) {
+      return res.status(404).json({ success: false, error: 'Room not found' });
+    }
+    
     // Build meta object with floor and description
     let metaObject = {};
+    
+    // Parse existing meta
+    if (currentRoom[0].meta) {
+      try {
+        metaObject = typeof currentRoom[0].meta === 'string' ? JSON.parse(currentRoom[0].meta) : currentRoom[0].meta;
+      } catch (e) {
+        console.log('⚠️ Error parsing existing meta:', e);
+      }
+    }
+    
+    // Merge with new meta if provided
     if (meta) {
-      metaObject = typeof meta === 'string' ? JSON.parse(meta) : meta;
+      const newMeta = typeof meta === 'string' ? JSON.parse(meta) : meta;
+      metaObject = { ...metaObject, ...newMeta };
     }
     
     // Add floor and description to meta if provided
-    if (floor !== undefined) {
+    if (floor !== undefined && floor !== null && floor !== '') {
       metaObject.floor = floor;
     }
-    if (description !== undefined) {
+    if (description !== undefined && description !== null && description !== '') {
       metaObject.description = description;
     }
     
     const metaJson = JSON.stringify(metaObject);
+    console.log('💾 Saving meta:', metaJson);
     
     const [result] = await pool.query(
       'UPDATE rooms SET room_type = ?, rate = ?, capacity = ?, status = ?, meta = ? WHERE id = ?',
@@ -184,6 +206,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Room not found' });
     }
     
+    console.log('✅ Room updated successfully, affectedRows:', result.affectedRows);
     res.json({ success: true, message: 'Room updated successfully' });
   } catch (err) {
     console.error('Failed to update room:', err);
