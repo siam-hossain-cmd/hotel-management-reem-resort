@@ -697,16 +697,16 @@ const CreateBooking = () => {
                               <span>{room.capacity} guests</span>
                             </div>
                             <div className="info-item">
-                              <span>Floor {JSON.parse(room.meta || '{}').floor || 'N/A'}</span>
+                              <span>Floor {room.floor || (typeof room.meta === 'object' ? room.meta?.floor : null) || 'N/A'}</span>
                             </div>
                             <div className="info-item">
-                              <span>{JSON.parse(room.meta || '{}').has_ac ? 'AC' : 'Non-AC'}</span>
+                              <span>{(typeof room.meta === 'object' ? room.meta?.has_ac : null) ? 'AC' : 'Non-AC'}</span>
                             </div>
                           </div>
                           
-                          {JSON.parse(room.meta || '{}').description && (
+                          {(room.description || (typeof room.meta === 'object' ? room.meta?.description : null)) && (
                             <p className="room-description">
-                              {JSON.parse(room.meta || '{}').description}
+                              {room.description || (typeof room.meta === 'object' ? room.meta?.description : null)}
                             </p>
                           )}
                           
