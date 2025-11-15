@@ -367,7 +367,7 @@ const Rooms = () => {
                 </div>
                 <div className="info-item">
                   <MapPin size={16} />
-                  <span>Floor {room.floor || JSON.parse(room.meta || '{}').floor || 'N/A'}</span>
+                  <span>Floor {room.floor || (typeof room.meta === 'object' ? room.meta?.floor : null) || 'N/A'}</span>
                 </div>
               </div>
               
